@@ -68,7 +68,6 @@ def main():
         d = np.sqrt((rr - r0) ** 2 + (cc - c0) ** 2)
         cloud_soft = np.maximum(cloud_soft, np.clip(1.0 - d / rad, 0, 1))
     cloud_soft = np.clip(cloud_soft * 1.4, 0, 1)
-    cloud = cloud_soft > 0.35
 
     n_bands = len(SPECTRA['water'])
     stack = np.empty((n_bands, H, W), np.float32)

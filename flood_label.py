@@ -892,8 +892,8 @@ def main():
     print(f'\n{len(scenes)} imagen(es) en {d}:')
     for i, s in enumerate(scenes, 1):
         print(f'   {i}. {os.path.basename(s)}')
-    print(f'\nClases:      ' + '   '.join(f'{i + 1}={c}' for i, c in enumerate(CLASSES)))
-    print(f'Herramientas: ' + '   '.join(f'{k}={v}' for k, v in TOOL_KEYS.items()))
+    print('\nClases:      ' + '   '.join(f'{i + 1}={c}' for i, c in enumerate(CLASSES)))
+    print('Herramientas: ' + '   '.join(f'{k}={v}' for k, v in TOOL_KEYS.items()))
     print(f'Salidas:      {geojson_path}\n              {csv_path}\n')
 
     FloodLabelApp(scenes, csv_path, geojson_path, event_id=args.event_id,
