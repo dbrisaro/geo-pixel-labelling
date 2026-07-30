@@ -62,3 +62,52 @@ Label Studio (que no lee GeoTIFF).
 
 El suavizado de speckle es solo visual: `--speckle N` cambia la ventana, `0` la
 apaga. No afecta lo que se guarda.
+
+## Etiquetar en Label Studio en vez de la GUI
+
+Mismo resultado, otra ventana: sale el mismo `flood_polygons.geojson`. Label
+Studio nunca ve el GeoTIFF ni sabe nada de coordenadas — devuelve píxeles, y el
+repo les aplica el `transform` que guardó `render_chip.py`.
+
+```
+data/SAR/*.tif ──render_chip.py──▶ chips/*.png + *.json
+                                        │
+                    make_tasks.py ──▶ tasks.json ──▶ Label Studio ──▶ export.json
+                                        │                                   │
+                                   (se queda acá) ──── import_labels.py ◀───┘
+                                                              │
+                                              labels/flood_polygons.geojson
+```
+
+El nexo entre las dos mitades es `scene_id`: viaja en la tarea, vuelve en el
+export, y con él `import_labels.py` sabe qué `chips/*.json` abrir.
+
+```bash
+python flood/render_chip.py data/SAR/escena.tif chips/
+python flood/make_tasks.py chips/
+./flood/start_labelstudio.sh                      # http://localhost:8080
+# etiquetar, exportar en formato JSON a labels/export.json
+.venv-ls/bin/python flood/import_labels.py labels/export.json --dry-run
+.venv-ls/bin/python flood/import_labels.py labels/export.json
+```
+
+El conversor corre con `.venv-ls/bin/python` y no con anaconda, porque el
+decodificador de RLE viene con `label-studio-sdk`. Es el único script del repo
+que usa ese env.
+
+**Herramientas.** Label Studio tiene polígono, pincel y varita mágica; **no tiene
+lazo a mano alzada**. La varita es flood fill por umbral, corre en el navegador
+sin modelo, y sobre SAR en dB funciona bien porque el agua es oscura y uniforme.
+Varita y pincel devuelven máscaras RLE, el polígono devuelve vértices; los tres
+terminan en el mismo GeoJSON.
+
+**Cuidado con las regiones sin clase.** Si dibujás antes de elegir la clase,
+Label Studio te deja guardar la región sin etiqueta y se pierde. En la GUI no
+puede pasar porque la clase es un radio siempre seleccionado. `import_labels.py`
+las cuenta y las avisa una por una en vez de tragárselas — si ves esos avisos,
+son etiquetas que hay que rehacer.
+
+**Estado de la verificación.** El ida y vuelta píxel → lon/lat → píxel da un
+error de 1e-10 px, y las áreas por polígono suman exactamente la máscara. La
+reproyección desde CRS proyectados (UTM) todavía no se probó: las escenas de
+Bolivia vienen en EPSG:4326 y no ejercitan esa rama.

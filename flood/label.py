@@ -57,12 +57,12 @@ from matplotlib.lines import Line2D
 from matplotlib.path import Path
 
 import rasterio
-from rasterio.features import shapes as rio_shapes
-from rasterio.warp import transform as warp_transform
 from rasterio.crs import CRS
 
 import render
 from render import DEFAULT_SPECKLE
+from geometry import mask_to_polygons, rings_to_coords, shoelace_px
+import geometry
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -88,16 +88,6 @@ LASSO_MIN_STEP = 1.5      # px entre puntos del trazo: evita miles de vértices 
 # composición de falso color viven en render.py, compartidos con render_chip.py.
 
 
-def shoelace_px(verts):
-    """Área de un polígono en px², por la fórmula del cordón. O(n) en vértices,
-    así que se puede recalcular en cada movimiento del mouse sin que lagee."""
-    if len(verts) < 3:
-        return 0.0
-    a = np.asarray(verts, float)
-    x, y = a[:, 0], a[:, 1]
-    return 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
-
-
 def parse_date(name):
     m = re.search(r'(\d{4})-(\d{2})-(\d{2})', name)
     if m:
@@ -117,13 +107,6 @@ def parse_time(name):
 def list_scenes(d):
     files = sorted(glob.glob(os.path.join(d, '*.tif')) + glob.glob(os.path.join(d, '*.tiff')))
     return [f for f in files if not f.lower().endswith(SKIP_SUFFIXES)]
-
-
-def ring_signed_area(ring):
-    """Área con signo (fórmula del cordón). El signo da la orientación."""
-    a = np.asarray(ring, float)
-    x, y = a[:, 0], a[:, 1]
-    return 0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
 
 
 def compound_path(rings):
@@ -157,33 +140,6 @@ def labeled_scene_ids(geojson_path, csv_path):
         except Exception:
             pass
     return {i for i in ids if i}
-
-
-def mask_to_polygons(mask):
-    """Máscara booleana → lista de polígonos en coords de píxel; cada polígono es
-    [anillo_exterior, *anillos_interiores]. Se usa para que el pincel termine
-    guardando geometría igual que las otras herramientas, en vez de un formato de
-    salida aparte.
-
-    rio_shapes trabaja en coords de ESQUINA de píxel, mientras que el resto de la
-    app usa coords de CENTRO (como imshow: el entero N es el centro del píxel N).
-    De ahí el −0.5: sin ese ajuste los anillos caen entre los centros, un trazo de
-    1 px de ancho cuenta 0 píxeles y se descarta sin aviso, y todo lo demás queda
-    corrido medio píxel.
-    """
-    out = []
-    for geom, _ in rio_shapes(mask.astype(np.uint8), mask=mask,
-                              transform=rasterio.Affine.identity()):
-        rings = [[(float(x) - 0.5, float(y) - 0.5) for x, y in r[:-1]]
-                 for r in geom['coordinates'] if len(r) >= 4]
-        if not rings:
-            continue
-        # rio_shapes devuelve exterior e interiores con la misma orientación
-        sign_ext = ring_signed_area(rings[0])
-        rings = [rings[0]] + [r if ring_signed_area(r) * sign_ext < 0 else r[::-1]
-                              for r in rings[1:]]
-        out.append(rings)
-    return out
 
 
 # ── app ────────────────────────────────────────────────────────────────────────
@@ -725,29 +681,10 @@ class FloodLabelApp:
 
     # ── guardado ───────────────────────────────────────────────────────────────
     def _lonlat(self, cols, rows):
-        """(col, row) en convención de CENTRO de píxel → lon/lat EPSG:4326.
-        Una sola convención para clicks (enteros) y vértices (floats):
-        transform.xy hace transform * (col + 0.5, row + 0.5) y acepta floats,
-        verificado bit a bit. Antes los polígonos usaban transform * (col, row),
-        que apunta a la esquina y los corría medio píxel."""
-        xs, ys = rasterio.transform.xy(self.transform, list(rows), list(cols))
-        if self.crs and not self.crs.is_geographic:
-            return warp_transform(self.crs, CRS.from_epsg(4326), xs, ys)
-        return xs, ys
+        return geometry.lonlat(self.transform, self.crs, cols, rows)
 
     def _px_from_lonlat(self, lons, lats):
-        """Inversa de _lonlat: lon/lat → (col, row) en coords de centro de píxel.
-        Se usa para redibujar las etiquetas ya guardadas de esta escena."""
-        if self.crs and not self.crs.is_geographic:
-            xs, ys = warp_transform(CRS.from_epsg(4326), self.crs, list(lons), list(lats))
-        else:
-            xs, ys = list(lons), list(lats)
-        inv = ~self.transform
-        out = []
-        for x, y in zip(xs, ys):
-            c, r = inv * (x, y)
-            out.append((c - 0.5, r - 0.5))
-        return out
+        return geometry.px_from_lonlat(self.transform, self.crs, lons, lats)
 
     def _props(self):
         return {'scene_id': self.scene_id, 'image_type': self.kind,
@@ -779,14 +716,8 @@ class FloodLabelApp:
                     fc = {'type': 'FeatureCollection', 'features': []}
             n0 = len(fc['features'])
             for i, poly in enumerate(self.polygons):
-                coords = []
-                for r in [poly['verts']] + poly.get('holes', []):
-                    lons, lats = self._lonlat([v[0] for v in r], [v[1] for v in r])
-                    ring = [[round(float(x), 7), round(float(y), 7)]
-                            for x, y in zip(lons, lats)]
-                    if ring[0] != ring[-1]:
-                        ring.append(ring[0])
-                    coords.append(ring)
+                coords = rings_to_coords(self.transform, self.crs,
+                                         [poly['verts']] + poly.get('holes', []))
                 pr = self._props()
                 pr.update({'class': poly['class'], 'n_pixels': poly['n_px'],
                            'area_ha': round(poly['n_px'] * self.pixel_size_m ** 2 / 1e4, 3),
