@@ -1,16 +1,16 @@
 """
-render_chip.py — renderiza un GeoTIFF a PNG + JSON para Label Studio.
+flood/render_chip.py — renderiza un GeoTIFF a PNG + JSON para Label Studio.
 
 Label Studio no lee GeoTIFF, así que este script hace el render del lado del
 servidor y deja al lado un JSON con todo lo necesario para volver de píxeles a
 coordenadas cuando lleguen las etiquetas.
 
 Usa exactamente el mismo render que la GUI: render.Chip, compartido con
-flood_label.py.
+flood/label.py.
 
 Uso:
-    python render_chip.py data/SAR/Bolivia_60373_S1Hand.tif chips/
-    python render_chip.py escena.tif chips/ --view 2
+    python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif chips/
+    python flood/render_chip.py escena.tif chips/ --view 2
 """
 
 import os

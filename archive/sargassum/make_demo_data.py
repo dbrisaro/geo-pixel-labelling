@@ -1,5 +1,5 @@
 """
-make_demo_data.py — Genera una escena S2 sintética en data/DemoMX/S2/ para probar
+make_demo_data.py — Genera una escena S2 sintética en archive/sargassum/data/DemoMX/S2/ para probar
 la GUI sin necesidad de descargar imágenes reales.
 
 Escribe:
@@ -9,7 +9,7 @@ Escribe:
 La escena es UTM 16N (10 m/px) frente a Cancún, así que el overlay de tierra
 (ESA WorldCover) también se puede probar si hay internet.
 
-    python make_demo_data.py
+    python archive/sargassum/make_demo_data.py
 """
 import os
 import numpy as np

@@ -1,6 +1,6 @@
 """
 render.py — lectura y render visual de un chip, compartido por la GUI de
-etiquetado (flood_label.py) y el renderizador de PNGs para Label Studio
+etiquetado (flood/label.py) y el renderizador de PNGs para Label Studio
 (render_chip.py).
 
 Todo lo que hay acá es solo para VER la imagen: detección de SAR vs óptico por

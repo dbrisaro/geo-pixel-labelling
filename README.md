@@ -1,11 +1,22 @@
-# Etiquetado de sargazo
+# Etiquetado
 
-GUI de etiquetado por píxel sobre imágenes satelitales (Sentinel-2 / Landsat 8-9),
-con overlay de FAI (Floating Algae Index) y máscaras de nube/tierra para guiar
-el etiquetado. Guarda las etiquetas en `labels.csv` (clase + fila/columna + lat/lon + fecha).
+Herramientas de etiquetado manual sobre imágenes satelitales. El foco activo son
+las **inundaciones**; el etiquetado de sargazo quedó archivado.
 
-Clases: `sargassum`, `water`, `cloud`, `land` (cloud + land se agrupan como `other`
-si las usás para entrenar un clasificador binario sargazo/no-sargazo).
+```
+flood/                  ← activo: GUI de etiquetado de inundaciones (SAR y óptico)
+  label.py              app de etiquetado
+  render.py             render visual compartido (dB, stretch, despeckle, falso color)
+  render_chip.py        GeoTIFF → PNG + JSON, para Label Studio
+
+data/                   imágenes de entrada
+  SAR/                  escenas Sentinel-1 (default de flood/label.py)
+
+labels/                  salidas del etiquetado (geojson + csv)
+chips/                   PNG + JSON renderizados (no versionado)
+
+archive/sargassum/       pausado: GUI de sargazo con overlay de FAI, ver su README
+```
 
 ## Instalación
 
@@ -13,59 +24,18 @@ si las usás para entrenar un clasificador binario sargazo/no-sargazo).
 pip install -r requirements.txt
 ```
 
-Requiere Python 3.9+. `landmask.py` descarga on-the-fly (streaming, sin bajar el
-archivo entero) tiles de ESA WorldCover 10m desde un bucket público de AWS para
-pintar la máscara de tierra — necesita internet. Si no hay internet o falla la
-descarga, el script sigue funcionando, solo sin ese overlay.
-
-## Estructura de datos esperada
-
-```
-etiquetado/
-  data/
-    {site}/                        # nombre libre, ej. "CancunMX"
-      S2/                          # o "L8" / "L9"
-        2024-07-15_..._ms.tif      # bandas multiespectrales — OBLIGATORIO
-        2024-07-15_..._cloud.tif   # máscara de nube S2 (prob. s2cloudless 0-100) — opcional
-        2024-07-15_..._qa.tif      # máscara de nube L8/L9 (QA_PIXEL) — opcional
-  labels.csv                       # se crea acá al guardar la primera etiqueta
-```
-
-El nombre del archivo debe empezar con `YYYY-MM-DD` (se usa para fecha y filtro
-de meses/años). Bandas esperadas en el `_ms.tif` (en este orden):
-
-- **S2**: Blue, Green, Red, RE1, RE2, RE3, NIR, NIR_narrow, SWIR1
-- **L8/L9**: Blue, Green, Red, NIR, SWIR1
-
-Si tus imágenes vienen en otro orden de bandas, ajustá el diccionario `BAND_IDX`
-al inicio de `label.py`.
-
-## Uso
+Python 3.9+. Los scripts se corren **desde la raíz del repo**:
 
 ```bash
-python label.py --sensor S2 --site CancunMX                  # default: may-sep, nube ≤40%
-python label.py --sensor S2 --site CancunMX --months all      # sin filtro de temporada
-python label.py --sensor S2 --site CancunMX --max-cloud-pct 10
-python label.py --sensor S2 --all-sites                       # todos los sitios en data/
-python label.py --sensor S2 --site CancunMX --skip-labeled    # salta escenas ya etiquetadas
+python flood/label.py
 ```
 
-Controles en la GUI:
-- Click izquierdo → etiqueta el píxel con la clase seleccionada (radio "Clase").
-- Herramienta "polígono" → selecciona un área completa (útil para manchas grandes de sargazo).
-- Tecla `m` → prende/apaga el overlay de máscaras (nube detectada en magenta, tierra en marrón).
-- "Guardar → Siguiente" → escribe las etiquetas acumuladas a `labels.csv` y pasa a la próxima escena.
-- "Descartar" → pasa a la próxima escena sin guardar.
-- "Limpiar" → borra las etiquetas puestas en la escena actual (sin guardar).
-- "◄ Anterior" → vuelve a la escena previa.
+Ver [flood/README.md](flood/README.md) para las clases, herramientas de dibujo,
+formato de salida y opciones.
 
-## Notas de adaptación
+## Estado
 
-- Los umbrales de FAI (`vmin=-0.05, vmax=0.10`) y de nube (`S2_CLOUD_THRESHOLD = 40`)
-  están calibrados para nuestras escenas del Caribe; puede convenir ajustarlos según
-  la región/sensor.
-- El panel izquierdo muestra RGB (con overlays), el derecho el índice FAI
-  (verde = posible sargazo).
-- Este código salió de un pipeline mayor de detección costera de sargazo; acá
-  quedó aislado solo con lo necesario para etiquetar. No incluye el modelo de
-  entrenamiento ni los datos ya etiquetados.
+- Etiquetado de inundaciones: en uso.
+- Hosting: en curso — la idea es servir el etiquetado con Label Studio en vez de
+  la GUI local. `flood/render_chip.py` es la pieza que prepara los chips para eso.
+- Sargazo: archivado en `archive/sargassum/`, funciona pero no se está tocando.

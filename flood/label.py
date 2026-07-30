@@ -1,5 +1,5 @@
 """
-flood_label.py — App de etiquetado manual de inundaciones (SAR y óptico)
+flood/label.py — App de etiquetado manual de inundaciones (SAR y óptico)
 
 VOS dibujás las etiquetas. La app no clasifica nada: solo muestra la imagen de la
 mejor forma posible para que puedas interpretarla, y guarda lo que marcás.
@@ -30,11 +30,11 @@ Salidas (carpeta labels/):
 Lo que ya guardaste para una escena se vuelve a dibujar punteado al reabrirla, así
 no se etiqueta dos veces lo mismo. Lo nuevo se suma a lo guardado, no lo reemplaza.
 
-Uso:
-    python flood_label.py                          # lee data/SAR/
-    python flood_label.py --dir data/otra_carpeta
-    python flood_label.py --event-id bolivia-60373
-    python flood_label.py --skip-labeled           # saltea escenas ya etiquetadas
+Uso (desde la raíz del repo):
+    python flood/label.py                          # lee data/SAR/
+    python flood/label.py --dir data/otra_carpeta
+    python flood/label.py --event-id bolivia-60373
+    python flood/label.py --skip-labeled           # saltea escenas ya etiquetadas
 """
 
 import os
@@ -65,6 +65,7 @@ import render
 from render import DEFAULT_SPECKLE
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 
 CLASSES = ['water', 'dry_land', 'cloud', 'radar_shadow']
 CLASS_COLORS = {
@@ -366,8 +367,8 @@ class FloodLabelApp:
         self.sub.set_text(f'{self.kind} · {self.bands_txt} · {self.pixel_size_m} m/px'
                           f'{" · " + self.date if self.date else ""}{sm}')
         self._update_help()
-        self.outtxt.set_text(f'guardando en: {os.path.relpath(self.geojson_path, HERE)}  +  '
-                             f'{os.path.relpath(self.csv_path, HERE)}')
+        self.outtxt.set_text(f'guardando en: {os.path.relpath(self.geojson_path, ROOT)}  +  '
+                             f'{os.path.relpath(self.csv_path, ROOT)}')
         self._draw_labels()
         self.fig.canvas.draw_idle()
 
@@ -752,7 +753,7 @@ class FloodLabelApp:
         return {'scene_id': self.scene_id, 'image_type': self.kind,
                 'pixel_size_m': self.pixel_size_m, 'date': self.date,
                 'time_utc': self.time_utc, 'event_id': self.event_id,
-                'image_path': os.path.relpath(self.path, HERE)}
+                'image_path': os.path.relpath(self.path, ROOT)}
 
     def _save(self):
         self._cancel_draw()
@@ -866,11 +867,11 @@ def main():
                    help='Además de la geometría, escribe cada píxel del polígono al CSV')
     p.add_argument('--skip-labeled', action='store_true',
                    help='Saltea las escenas que ya tienen etiquetas guardadas')
-    p.add_argument('--out', default=os.path.join(HERE, 'labels'),
+    p.add_argument('--out', default=os.path.join(ROOT, 'labels'),
                    help='Carpeta de salida (default: labels/)')
     args = p.parse_args()
 
-    d = args.dir if os.path.isabs(args.dir) else os.path.join(HERE, args.dir)
+    d = args.dir if os.path.isabs(args.dir) else os.path.join(ROOT, args.dir)
     scenes = list_scenes(d)
     if not scenes:
         sys.exit(f'No encontré ningún .tif en {d}')
