@@ -1,0 +1,43 @@
+<!--
+  Pantalla de etiquetado de inundaciones para Label Studio.
+  Se pega en Settings → Labeling Interface → Code del proyecto.
+
+  Es el equivalente de CLASSES, CLASS_COLORS y TOOLS en flood/label.py: declara
+  las 4 clases con sus colores y qué herramientas hay. No calcula nada.
+
+  Las 3 herramientas comparten un mismo <Labels>, así que se eligen desde la
+  barra según convenga:
+    varita    clic en el agua y arrastrás para agrandar la tolerancia. Lo más
+              rápido cuando la mancha es oscura y uniforme (SAR en dB).
+    pincel    pintar y borrar a mano. Para retocar lo que dejó la varita.
+    polígono  vértice por vértice. Para cuando el umbral no agarra.
+
+  Varita y pincel devuelven máscaras RLE; el polígono devuelve vértices.
+
+  radar_shadow aplica sólo a SAR y cloud sólo a óptico. El tipo de cada escena
+  viaja en la tarea (image_type, lo pone make_tasks.py) y se ve en el encabezado.
+
+  Al hostear, si los PNG se sirven desde otro dominio, el <Image> necesita
+  crossOrigin="anonymous" y ese dominio tiene que mandar headers CORS: la varita
+  lee los píxeles en el navegador y sin eso no funciona.
+-->
+<View>
+
+  <Header value="$scene_id — $image_type — $view_label"/>
+
+  <Labels name="label" toName="img">
+    <Label value="water"        background="#0a84ff"/>
+    <Label value="dry_land"     background="#c69c6d"/>
+    <Label value="cloud"        background="#f2f2f7"/>
+    <Label value="radar_shadow" background="#bf5af2"/>
+  </Labels>
+
+  <MagicWand name="wand"  toName="img" defaultthreshold="15" blurradius="5"/>
+  <Brush     name="brush" toName="img"/>
+  <Polygon   name="poly"  toName="img" strokeWidth="2"/>
+
+  <Image name="img" value="$image"
+         zoom="true" zoomControl="true"
+         brightnessControl="true" contrastControl="true"/>
+
+</View>
