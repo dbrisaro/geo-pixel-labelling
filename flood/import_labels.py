@@ -7,8 +7,19 @@ caminos son intercambiables aguas abajo.
 
 De dónde saca cada cosa:
     del export        la geometría, en píxeles de la imagen, y la clase
-    de chips/*.json   el crs y el transform de esa escena
-    el nexo           scene_id, que viaja en la tarea y vuelve en el export
+    de chips/*.json   el crs, el transform y los paneles de ese lugar
+    el nexo           place_id, que viaja en la tarea y vuelve en el export
+
+Un PNG puede tener varias vistas del mismo lugar pegadas una al lado de la otra
+(las arma render_chip.py). Label Studio no sabe nada de eso: devuelve píxeles del
+PNG entero. Acá se averigua en qué panel cayó cada región, se le resta el
+corrimiento en x de ese panel, y recién entonces se aplica el transform. Como
+todos los paneles comparten la grilla, da igual en cuál dibujaste: cae en el
+mismo lugar del mapa.
+
+Los chips de una sola vista se tratan como un panel único con corrimiento 0, así
+que los exports viejos (los que traen scene_id en vez de place_id) siguen
+convirtiéndose por el mismo camino.
 
 Formato del export, verificado sobre uno real y no adivinado. Cada región deja
 DOS entradas en `result`, unidas por el campo `id`:
@@ -77,8 +88,8 @@ def parse_time(name):
     return f'{m.group(1)}:{m.group(2)}:{m.group(3)}' if m else ''
 
 
-def load_chip_meta(chips_dir, scene_id):
-    path = os.path.join(chips_dir, f'{scene_id}.json')
+def load_chip_meta(chips_dir, place_id):
+    path = os.path.join(chips_dir, f'{place_id}.json')
     if not os.path.exists(path):
         return None
     with open(path) as f:
@@ -86,6 +97,32 @@ def load_chip_meta(chips_dir, scene_id):
     meta['_transform'] = rasterio.Affine(*meta['transform'])
     meta['_crs'] = CRS.from_string(meta['crs']) if meta.get('crs') else None
     return meta
+
+
+def panels_of(meta):
+    """Los paneles del chip. Un chip de una sola vista es un panel con
+    corrimiento 0, así el resto del código no distingue los dos casos."""
+    if meta.get('panels'):
+        return meta['panels']
+    return [{'scene_id': meta.get('scene_id') or meta.get('place_id', ''),
+             'source_tif': meta.get('source_tif', ''),
+             'image_type': meta.get('image_type', ''),
+             'x_offset': 0,
+             'width': meta['width'],
+             'height': meta['height']}]
+
+
+def panel_for_ring(ring, panels):
+    """En qué panel cae un anillo, o None si cruza dos o cae en la franja.
+    Los anillos vienen en coords de centro, así que el panel que arranca en la
+    columna x0 y mide w cubre [x0 − 0.5, x0 + w − 0.5]."""
+    xs = [v[0] for v in ring]
+    lo, hi = min(xs), max(xs)
+    for pan in panels:
+        x0, w = pan['x_offset'], pan['width']
+        if lo >= x0 - 0.5 - 1e-6 and hi <= x0 + w - 0.5 + 1e-6:
+            return pan
+    return None
 
 
 def regions(result):
@@ -105,8 +142,8 @@ def regions(result):
             yield rid, r, cls
 
 
-def rle_to_rings(value, width, height):
-    """RLE de Label Studio → anillos en coords de centro de píxel.
+def rle_to_mask(value, width, height):
+    """RLE de Label Studio → máscara booleana del PNG entero.
 
     decode_rle devuelve el mapa aplanado con 4 canales (RGBA); la máscara es
     "algún canal prendido". Se mira el alfa, que es el que marca lo pintado.
@@ -114,37 +151,69 @@ def rle_to_rings(value, width, height):
     flat = decode_rle(value['rle'])
     n = width * height
     if flat.size == n * 4:
-        mask = flat.reshape(height, width, 4)[:, :, 3] > 0
-    elif flat.size == n:
-        mask = flat.reshape(height, width) > 0
-    else:
-        raise ValueError(f'RLE de {flat.size} valores no encaja en {width}x{height}')
-    return mask_to_polygons(mask)
+        return flat.reshape(height, width, 4)[:, :, 3] > 0
+    if flat.size == n:
+        return flat.reshape(height, width) > 0
+    raise ValueError(f'RLE de {flat.size} valores no encaja en {width}x{height}')
 
 
-def points_to_rings(value, width, height):
+def points_to_ring(value, width, height):
     """Vértices en % del ancho/alto → un anillo en coords de centro de píxel.
     El 0% es el borde izquierdo (esquina), y acá se trabaja en centros: de ahí
     el −0.5, la misma corrección que aplica mask_to_polygons."""
-    ring = [(p[0] / 100.0 * width - 0.5, p[1] / 100.0 * height - 0.5)
+    return [(p[0] / 100.0 * width - 0.5, p[1] / 100.0 * height - 0.5)
             for p in value['points']]
-    return [[ring]] if len(ring) >= 3 else []
+
+
+def polygons_by_panel(r, w, h, panels, place_id, rid, warn):
+    """Geometría de una región → [(panel, polígonos en píxeles de ESE panel)].
+
+    Una máscara se recorta por panel: cada trozo ya queda en coords del panel.
+    Un polígono se asigna entero al panel que lo contiene, porque partirlo sería
+    inventar vértices en el corte.
+
+    Devuelve None si ya avisó el motivo, para que quien llama no vuelva a avisar."""
+    t = r.get('type')
+    if t in MASK_TYPES:
+        mask = rle_to_mask(r['value'], w, h)
+        trozos = []
+        for pan in panels:
+            sub = mask[:, pan['x_offset']:pan['x_offset'] + pan['width']]
+            if sub.any():
+                trozos.append((pan, mask_to_polygons(sub)))
+        if len(trozos) > 1:
+            warn(f'{place_id}: región {rid} pintada sobre {len(trozos)} paneles; '
+                 f'como son el mismo terreno la geografía va a quedar repetida, '
+                 f'conviene rehacerla en uno solo')
+        return trozos
+
+    ring = points_to_ring(r['value'], w, h)
+    if len(ring) < 3:
+        return []
+    pan = panel_for_ring(ring, panels)
+    if pan is None:
+        warn(f'{place_id}: región {rid} cruza el borde entre paneles o cae en la '
+             f'franja separadora, la salteo')
+        return None
+    x0 = pan['x_offset']
+    return [(pan, [[[(x - x0, y) for x, y in ring]]])]
 
 
 def features_for_task(task, chips_dir, event_id, warn):
     data = task.get('data', {})
-    scene_id = data.get('scene_id')
-    if not scene_id:
-        warn(f'tarea {task.get("id")} sin scene_id, la salteo')
+    place_id = data.get('place_id') or data.get('scene_id')
+    if not place_id:
+        warn(f'tarea {task.get("id")} sin place_id ni scene_id, la salteo')
         return []
 
-    meta = load_chip_meta(chips_dir, scene_id)
+    meta = load_chip_meta(chips_dir, place_id)
     if meta is None:
-        warn(f'{scene_id}: no encontré {scene_id}.json en {os.path.relpath(chips_dir, ROOT)}')
+        warn(f'{place_id}: no encontré {place_id}.json en {os.path.relpath(chips_dir, ROOT)}')
         return []
 
     transform, crs = meta['_transform'], meta['_crs']
     px_m = meta.get('pixel_size_m') or 0
+    panels = panels_of(meta)
     out = []
 
     for ann in task.get('annotations', []):
@@ -154,42 +223,46 @@ def features_for_task(task, chips_dir, event_id, warn):
             w = r.get('original_width') or meta['width']
             h = r.get('original_height') or meta['height']
             if (w, h) != (meta['width'], meta['height']):
-                warn(f'{scene_id}: el export dice {w}x{h} y el chip {meta["width"]}x'
+                warn(f'{place_id}: el export dice {w}x{h} y el chip {meta["width"]}x'
                      f'{meta["height"]}; el PNG cambió después de etiquetar, la salteo')
                 continue
             if r.get('image_rotation'):
-                warn(f'{scene_id}: región {rid} etiquetada con la imagen rotada, la salteo')
+                warn(f'{place_id}: región {rid} etiquetada con la imagen rotada, la salteo')
                 continue
             if cls is None:
-                warn(f'{scene_id}: región {rid} sin clase (se dibujó sin elegirla), la salteo')
+                warn(f'{place_id}: región {rid} sin clase (se dibujó sin elegirla), la salteo')
                 continue
 
             t = r.get('type')
-            polys = (rle_to_rings(r['value'], w, h) if t in MASK_TYPES
-                     else points_to_rings(r['value'], w, h))
-            if not polys:
-                warn(f'{scene_id}: región {rid} quedó vacía, la salteo')
+            trozos = polygons_by_panel(r, w, h, panels, place_id, rid, warn)
+            if trozos is None:
+                continue
+            if not any(polys for _, polys in trozos):
+                warn(f'{place_id}: región {rid} quedó vacía, la salteo')
                 continue
 
-            for i, rings in enumerate(polys):
-                n_px = rings_area_px(rings)
-                pr = {'scene_id': scene_id,
-                      'image_type': meta.get('image_type', ''),
-                      'pixel_size_m': px_m,
-                      'date': parse_date(scene_id),
-                      'time_utc': parse_time(scene_id),
-                      'event_id': event_id,
-                      'image_path': meta.get('source_tif', ''),
-                      'class': cls,
-                      'n_pixels': n_px,
-                      'area_ha': round(n_px * px_m ** 2 / 1e4, 3),
-                      'geom_id': f'{scene_id}#{rid}' + (f'-{i}' if len(polys) > 1 else ''),
-                      'source': 'label-studio',
-                      'tool': t,
-                      'annotator': ann.get('completed_by')}
-                out.append({'type': 'Feature', 'properties': pr,
-                            'geometry': {'type': 'Polygon',
-                                         'coordinates': rings_to_coords(transform, crs, rings)}})
+            for pan, polys in trozos:
+                scene_id = pan['scene_id']
+                for i, rings in enumerate(polys):
+                    n_px = rings_area_px(rings)
+                    pr = {'place_id': place_id,
+                          'scene_id': scene_id,
+                          'image_type': pan.get('image_type', ''),
+                          'pixel_size_m': px_m,
+                          'date': parse_date(scene_id),
+                          'time_utc': parse_time(scene_id),
+                          'event_id': event_id,
+                          'image_path': pan.get('source_tif', ''),
+                          'class': cls,
+                          'n_pixels': n_px,
+                          'area_ha': round(n_px * px_m ** 2 / 1e4, 3),
+                          'geom_id': f'{scene_id}#{rid}' + (f'-{i}' if len(polys) > 1 else ''),
+                          'source': 'label-studio',
+                          'tool': t,
+                          'annotator': ann.get('completed_by')}
+                    out.append({'type': 'Feature', 'properties': pr,
+                                'geometry': {'type': 'Polygon',
+                                             'coordinates': rings_to_coords(transform, crs, rings)}})
     return out
 
 

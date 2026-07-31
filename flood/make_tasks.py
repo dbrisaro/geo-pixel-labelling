@@ -1,17 +1,21 @@
 """
 flood/make_tasks.py — arma el tasks.json que se importa en Label Studio.
 
-Label Studio no mira carpetas: hay que darle una lista de qué etiquetar. Este
-script recorre una carpeta de chips (los PNG + JSON que dejó render_chip.py) y
-escribe una tarea por escena.
+Este script recorre una carpeta de chips (los PNG + JSON que dejó render_chip.py) y
+escribe una tarea por lugar.
 
-Cada tarea lleva el scene_id adentro. Label Studio lo devuelve tal cual en el
-export, y es lo que después permite encontrar el JSON con el crs y el transform
-de esa escena para volver de píxeles a lon/lat.
+Cada tarea lleva el place_id adentro. Label Studio lo devuelve tal cual en el
+export, y es lo que después permite encontrar el JSON con el crs, el transform y
+los paneles de ese lugar para volver de píxeles a lon/lat.
+
+Si un chip tiene varios paneles (varias vistas pegadas en un PNG), las escenas que
+lo componen NO generan tarea propia: ya están dentro del panel. Sin eso se
+etiquetaría dos veces el mismo terreno y el export traería dos verdades para los
+mismos píxeles.
 
 La URL de la imagen es lo único que cambia entre local y hosteado:
 
-    local       /data/local-files/?d=chips/escena.png
+    local       /data/local-files/?d=chips/lugar.png
                 requiere LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true y
                 LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT apuntando a la raíz del repo
     hosteado    --base-url https://donde-sea/chips
@@ -38,22 +42,54 @@ def image_url(png_path, base_url):
     return f'/data/local-files/?d={rel}'
 
 
-def make_tasks(chips_dir, base_url=''):
-    tasks = []
+def load_metas(chips_dir):
+    metas = []
     for meta_path in sorted(glob.glob(os.path.join(chips_dir, '*.json'))):
         with open(meta_path) as f:
             meta = json.load(f)
-        if 'scene_id' not in meta or 'png' not in meta:
+        if 'png' not in meta or not (meta.get('place_id') or meta.get('scene_id')):
             continue
+        metas.append(meta)
+    return metas
+
+
+def panels_of(meta):
+    if meta.get('panels'):
+        return meta['panels']
+    return [{'scene_id': meta.get('scene_id', ''),
+             'image_type': meta.get('image_type', ''),
+             'view_label': meta.get('view_label', '')}]
+
+
+def make_tasks(chips_dir, base_url=''):
+    metas = load_metas(chips_dir)
+
+    dentro_de_panel = set()
+    for meta in metas:
+        if len(panels_of(meta)) > 1:
+            dentro_de_panel.update(p['scene_id'] for p in panels_of(meta))
+
+    tasks = []
+    for meta in metas:
+        place_id = meta.get('place_id') or meta['scene_id']
+        panels = panels_of(meta)
+        if len(panels) == 1 and panels[0]['scene_id'] in dentro_de_panel:
+            print(f'  {panels[0]["scene_id"]} ya está dentro de un panel, no le hago tarea')
+            continue
+
         png_path = os.path.join(chips_dir, meta['png'])
         if not os.path.exists(png_path):
-            print(f'  aviso: falta el PNG de {meta["scene_id"]}, la salteo')
+            print(f'  aviso: falta el PNG de {place_id}, la salteo')
             continue
+
+        tipos = list(dict.fromkeys(p['image_type'] for p in panels if p['image_type']))
         tasks.append({'data': {
             'image': image_url(png_path, base_url),
-            'scene_id': meta['scene_id'],
-            'image_type': meta.get('image_type', ''),
-            'view_label': meta.get('view_label', ''),
+            'place_id': place_id,
+            'image_type': ' + '.join(tipos),
+            'view_label': ' | '.join(f'{p["scene_id"]}: {p["view_label"]}'
+                                     for p in panels) if len(panels) > 1
+                          else panels[0]['view_label'],
         }})
     return tasks
 
@@ -90,7 +126,7 @@ def main():
     print(f'\n{len(tasks)} tarea(s) → {os.path.relpath(out, ROOT)}')
     for t in tasks:
         d = t['data']
-        print(f'   {d["scene_id"]:<28} {d["image_type"]:<7} {d["image"]}')
+        print(f'   {d["place_id"]:<20} {d["image_type"]:<17} {d["image"]}')
 
 
 if __name__ == '__main__':
