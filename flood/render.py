@@ -1,11 +1,10 @@
 """
-render.py — lectura y render visual de un chip, compartido por la GUI de
-etiquetado (flood/label.py) y el renderizador de PNGs para Label Studio
-(render_chip.py).
+render.py — reading and visual rendering of a chip, shared by the labelling GUI
+(flood/label.py) and the PNG renderer for Label Studio (render_chip.py).
 
-Todo lo que hay acá es solo para VER la imagen: detección de SAR vs óptico por
-nombres de banda, conversión a dB, stretch por percentiles, suavizado de speckle
-y composición de falso color. No altera lo que se guarda como etiqueta.
+Everything in here is only for SEEING the image: SAR vs optical detection by band
+names, dB conversion, percentile stretching, speckle smoothing and false colour
+composition. It does not alter what gets saved as a label.
 """
 
 import os
@@ -21,8 +20,9 @@ try:
 except Exception:                                    # pragma: no cover
     median_filter = None
 
-# Alias de nombre de banda → se resuelven desde las descripciones del .tif.
-# Sen1Floods11 las trae ('VV','VH','B2'...), que es lo único robusto entre proveedores.
+# Band name aliases → resolved from the .tif descriptions.
+# Sen1Floods11 ships them ('VV','VH','B2'...), which is the only robust thing
+# across providers.
 ALIASES = {
     'VV':    ('VV',),
     'VH':    ('VH',),
@@ -34,15 +34,15 @@ ALIASES = {
 }
 FALLBACK_SAR = {'VV': 0, 'VH': 1}
 FALLBACK_OPT = {
-    13: {'Blue': 1, 'Green': 2, 'Red': 3, 'NIR': 7, 'SWIR1': 11},   # S2 completo
-    9:  {'Blue': 0, 'Green': 1, 'Red': 2, 'NIR': 6, 'SWIR1': 8},    # S2 recortado
+    13: {'Blue': 1, 'Green': 2, 'Red': 3, 'NIR': 7, 'SWIR1': 11},   # full S2
+    9:  {'Blue': 0, 'Green': 1, 'Red': 2, 'NIR': 6, 'SWIR1': 8},    # trimmed S2
     5:  {'Blue': 0, 'Green': 1, 'Red': 2, 'NIR': 3, 'SWIR1': 4},    # Landsat 8/9
 }
 DEFAULT_SPECKLE = 3
 
 
 def band_map(descriptions, count):
-    """Devuelve (tipo, mapa_de_bandas, origen). tipo = 'SAR' | 'OPTICAL'."""
+    """Returns (kind, band_map, origin). kind = 'SAR' | 'OPTICAL'."""
     desc = {}
     for i, d in enumerate(descriptions or []):
         if d:
@@ -74,7 +74,7 @@ def band_map(descriptions, count):
 
 
 def stretch(arr, lo=2, hi=98):
-    """Percentil robusto → [0,1]. Funciona con dB (negativos) y con reflectancia."""
+    """Robust percentile → [0,1]. Works with dB (negatives) and with reflectance."""
     v = arr[np.isfinite(arr)]
     if v.size < 10:
         return np.zeros_like(arr)
@@ -85,7 +85,7 @@ def stretch(arr, lo=2, hi=98):
 
 
 def to_db(arr):
-    """SAR a dB. Si ya viene en dB (mediana negativa) no toca nada."""
+    """SAR to dB. If it already comes in dB (negative median) it touches nothing."""
     v = arr[np.isfinite(arr)]
     if v.size == 0 or np.percentile(v, 50) < 0:
         return arr, 'ya en dB'
@@ -96,7 +96,7 @@ def to_db(arr):
 
 
 def despeckle(arr, size):
-    """Mediana NxN preservando NaN. Solo para ver mejor: no altera lo que guardás."""
+    """NxN median preserving NaN. Only to see better: it does not alter what you save."""
     if size <= 1 or median_filter is None:
         return arr
     bad = ~np.isfinite(arr)
@@ -164,8 +164,9 @@ class Chip:
         self.N, self.S1 = raw[bidx['NIR']], raw[bidx['SWIR1']]
         self.bands_txt = 'RGB+NIR+SWIR1'
         self.vv = self.vh = None
-        # SWIR/NIR/Green: el compuesto estándar para inundaciones. El agua absorbe
-        # casi todo el SWIR, así que sale negra y contrasta con todo lo demás.
+        # SWIR/NIR/Green: the standard composite for flooding. Water absorbs
+        # almost all of the SWIR, so it comes out black and contrasts with
+        # everything else.
         self.views = ['falso color SWIR/NIR/Green (agua = negro)', 'RGB color natural']
 
     def image(self, view=0, speckle=DEFAULT_SPECKLE):

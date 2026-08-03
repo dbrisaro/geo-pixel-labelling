@@ -1,37 +1,40 @@
 <!--
-  Pantalla de etiquetado de inundaciones para Label Studio.
-  Se pega en Settings → Labeling Interface → Code del proyecto.
+  Flood labelling screen for Label Studio.
+  Paste it into the project's Settings → Labeling Interface → Code.
 
-  Es el equivalente de CLASSES, CLASS_COLORS y TOOLS en flood/label.py: declara
-  las 4 clases con sus colores y qué herramientas hay. No calcula nada.
+  It is the equivalent of CLASSES, CLASS_COLORS and TOOLS in flood/label.py: it
+  declares the 4 classes with their colours and which tools exist. It computes
+  nothing.
 
-  Los colores son para VER lo que dibujás, así que se eligen contra el fondo sobre
-  el que se dibuja cada clase, no por parecido con la cosa. cloud es rojo oscuro y
-  no blanco: el relleno de la región es semitransparente, y blanco sobre una nube
-  blanca no se distingue mientras la dibujás. Por eso también dry_land es tierra y
-  no gris, que es el color del SAR.
+  The colours are for SEEING what you draw, so they are chosen against the
+  background each class gets drawn on, not by resemblance to the thing. cloud is
+  dark red and not white: the region fill is semi-transparent, and white over a
+  white cloud cannot be told apart while you are drawing it. That is also why
+  dry_land is earth and not grey, which is the colour of the SAR.
 
-  Las 3 herramientas comparten un mismo <Labels>, así que se eligen desde la
-  barra según convenga:
-    varita    clic en el agua y arrastrás para agrandar la tolerancia. Lo más
-              rápido cuando la mancha es oscura y uniforme (SAR en dB).
-    pincel    pintar y borrar a mano. Para retocar lo que dejó la varita.
-    polígono  vértice por vértice. Para cuando el umbral no agarra.
+  The 3 tools share a single <Labels>, so they are picked from the toolbar as
+  convenient:
+    wand     click on the water and drag to widen the tolerance. Fastest when the
+             patch is dark and uniform (SAR in dB).
+    brush    paint and erase by hand. For touching up what the wand left.
+    polygon  vertex by vertex. For when the threshold does not catch.
 
-  Varita y pincel devuelven máscaras RLE; el polígono devuelve vértices.
+  Wand and brush return RLE masks; the polygon returns vertices.
 
-  radar_shadow aplica sólo a SAR y cloud sólo a óptico. El tipo de cada escena
-  viaja en la tarea (image_type, lo pone make_tasks.py) y se ve en el encabezado.
+  radar_shadow applies only to SAR and cloud only to optical. The type of each
+  scene travels in the task (image_type, set by make_tasks.py) and is visible in
+  the header.
 
-  El PNG puede traer varias vistas del mismo lugar pegadas una al lado de la otra,
-  separadas por una franja magenta. Es UNA imagen para Label Studio, así que esta
-  pantalla no cambia según cuántas vistas tenga la escena. Dibujá en el panel donde
-  mejor se vea: import_labels.py descuenta el corrimiento del panel y todo cae en
-  el mismo lugar del mapa. Lo que NO conviene es cruzar la franja con un trazo.
+  The PNG can carry several views of the same place stitched side by side,
+  separated by a magenta stripe. It is ONE image as far as Label Studio is
+  concerned, so this screen does not change according to how many views the scene
+  has. Draw on whichever panel shows it best: import_labels.py discounts the
+  panel offset and everything lands on the same place on the map. What you should
+  NOT do is cross the stripe with a stroke.
 
-  Al hostear, si los PNG se sirven desde otro dominio, el <Image> necesita
-  crossOrigin="anonymous" y ese dominio tiene que mandar headers CORS: la varita
-  lee los píxeles en el navegador y sin eso no funciona.
+  When hosting, if the PNGs are served from another domain, the <Image> needs
+  crossOrigin="anonymous" and that domain has to send CORS headers: the wand reads
+  the pixels in the browser and without that it does not work.
 -->
 <View>
 

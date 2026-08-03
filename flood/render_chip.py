@@ -1,28 +1,30 @@
 """
-flood/render_chip.py — renderiza uno o varios GeoTIFF a PNG + JSON para Label Studio.
+flood/render_chip.py — renders one or more GeoTIFFs to PNG + JSON for Label Studio.
 
-Label Studio no lee GeoTIFF, así que este script hace el render del lado del
-servidor y deja al lado un JSON con todo lo necesario para volver de píxeles a
-coordenadas cuando lleguen las etiquetas.
+Label Studio does not read GeoTIFF, so this script does the rendering on the
+server side and leaves a JSON next to it with everything needed to go back from
+pixels to coordinates when the labels arrive.
 
-Usa exactamente el mismo render que la GUI: render.Chip, compartido con
+It uses exactly the same rendering as the GUI: render.Chip, shared with
 flood/label.py.
 
-Con varios TIFF del mismo lugar arma UN PNG con las vistas pegadas una al lado de
-la otra. La pantalla de Label Studio es una sola para todo el proyecto y no puede
-cambiar según cuántas vistas tenga cada escena, así que la comparación se resuelve
-acá: Label Studio siempre ve una imagen sola, tenga un panel o cuatro.
+Given several TIFFs of the same place it builds ONE PNG with the views stitched
+side by side. The Label Studio screen is a single one for the whole project and
+cannot change according to how many views each scene has, so the comparison is
+resolved here: Label Studio always sees one lone image, whether it has one panel
+or four.
 
-Las vistas tienen que compartir la grilla (mismo tamaño, CRS y transform). Es lo
-que hace que dibujar en cualquiera de los paneles caiga en el mismo lugar del
-mapa; si no la comparten, este script se niega en vez de mentir la geometría.
+The views have to share the grid (same size, CRS and transform). That is what
+makes drawing on any of the panels land on the same place on the map; if they do
+not share it, this script refuses instead of lying about the geometry.
 
-Entre paneles va una franja magenta. La varita mágica es un flood fill sobre los
-píxeles que se ven, y sin la franja el relleno se pasaría de un panel al otro.
+Between panels goes a magenta stripe. The magic wand is a flood fill over the
+pixels that are visible, and without the stripe the fill would spill from one
+panel into the other.
 
-Uso:
+Usage:
     python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif chips/
-    python flood/render_chip.py escena.tif chips/ --view 2
+    python flood/render_chip.py scene.tif chips/ --view 2
     python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif \\
                                 data/SAR/Bolivia_60373_S2Hand.tif chips/
 """
@@ -40,8 +42,8 @@ SEP_RGB = (1.0, 0.0, 1.0)
 
 
 def place_id_of(scene_ids):
-    """Prefijo común, cortando por segmentos y no por letras: el prefijo de
-    Bolivia_60373_S1Hand y Bolivia_60373_S2Hand es Bolivia_60373, no
+    """Common prefix, cutting by segments and not by letters: the prefix of
+    Bolivia_60373_S1Hand and Bolivia_60373_S2Hand is Bolivia_60373, not
     Bolivia_60373_S."""
     if len(scene_ids) == 1:
         return scene_ids[0]
@@ -144,18 +146,18 @@ def render_chip(tifs, out_dir, views=None, speckle=render.DEFAULT_SPECKLE,
 
 def main():
     p = argparse.ArgumentParser(
-        description='Renderiza uno o varios GeoTIFF del mismo lugar a PNG + JSON')
-    p.add_argument('tifs', nargs='+', help='Rutas de los GeoTIFF')
-    p.add_argument('out_dir', help='Carpeta de salida')
+        description='Renders one or more GeoTIFFs of the same place to PNG + JSON')
+    p.add_argument('tifs', nargs='+', help='Paths of the GeoTIFFs')
+    p.add_argument('out_dir', help='Output folder')
     p.add_argument('--view', type=int, nargs='+', default=[0],
-                   help='Vista de cada TIFF, en el mismo orden (default 0 para todos)')
+                   help='View of each TIFF, in the same order (default 0 for all)')
     p.add_argument('--place-id', default='',
-                   help='Nombre del lugar (default: prefijo común de los scene_id)')
+                   help='Name of the place (default: common prefix of the scene_ids)')
     p.add_argument('--speckle', type=int, default=render.DEFAULT_SPECKLE,
-                   help=f'Ventana del suavizado de speckle en SAR '
-                        f'(default {render.DEFAULT_SPECKLE}, 0 = ninguno)')
+                   help=f'Window of the speckle smoothing in SAR '
+                        f'(default {render.DEFAULT_SPECKLE}, 0 = none)')
     p.add_argument('--sep', type=int, default=SEP_PX,
-                   help=f'Ancho de la franja separadora entre paneles '
+                   help=f'Width of the separating stripe between panels '
                         f'(default {SEP_PX})')
     args = p.parse_args()
 

@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
 #
-# Levanta Label Studio local en http://localhost:8080
+# Starts Label Studio locally on http://localhost:8080
 #
-# Las dos variables habilitan que sirva los PNG de chips/ directamente del disco,
-# con la raíz del repo como document root. Así las tareas que arma make_tasks.py
-# pueden apuntar a /data/local-files/?d=chips/escena.png
+# The two variables enable serving the chips/ PNGs straight off disk, with the
+# repository root as document root. That way the tasks make_tasks.py builds can
+# point at /data/local-files/?d=chips/scene.png
 #
-# OJO: las variables NO alcanzan. El endpoint /data/local-files/ además exige que
-# el proyecto tenga una Local Storage registrada cuyo path sea prefijo del archivo
-# pedido; si no la encuentra devuelve 404 pelado. Ver
-# io_storages/localfiles/views.py, la query sobre LocalFilesImportStorage.
+# WATCH OUT: the variables are NOT enough. The /data/local-files/ endpoint also
+# requires the project to have a registered Local Storage whose path is a prefix
+# of the requested file; if it does not find one it returns a bare 404. See
+# io_storages/localfiles/views.py, the query over LocalFilesImportStorage.
 #
-# Una vez por proyecto, en la UI:
+# Once per project, in the UI:
 #   Settings → Cloud Storage → Add Source Storage → Local files
-#   Absolute local path: <raíz del repo>/chips
-#   File Name Filter: ^$        (para que un sync accidental no importe nada)
-#   Guardar SIN sincronizar: el sync crearía una tarea por PNG y duplicaría las
-#   que ya importó make_tasks.py.
+#   Absolute local path: <repository root>/chips
+#   File Name Filter: ^$        (so an accidental sync imports nothing)
+#   Save WITHOUT syncing: the sync would create one task per PNG and duplicate
+#   the ones make_tasks.py already imported.
 #
-# Esto es sólo para probar local: servir el filesystem es un riesgo de seguridad
-# y no debe sobrevivir al hosting (ahí los PNG van a una URL real).
+# This is only for local testing: serving the filesystem is a security risk and
+# must not survive into hosting (there the PNGs go to a real URL).
 #
-# La base de Label Studio queda en ~/Library/Application Support/label-studio,
-# fuera del repo. Las etiquetas de verdad salen del export, no de esa base.
+# The Label Studio database lives in ~/Library/Application Support/label-studio,
+# outside the repository. The real labels come out of the export, not that
+# database.
 
 set -euo pipefail
 

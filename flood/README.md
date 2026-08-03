@@ -1,125 +1,128 @@
-# Etiquetado de inundaciones
+# Flood labelling
 
-GUI de etiquetado manual sobre imágenes SAR (Sentinel-1) u ópticas. La app no
-clasifica nada: muestra la imagen de la mejor forma posible para interpretarla a
-ojo y guarda lo que dibujás.
+Manual labelling GUI for SAR (Sentinel-1) or optical imagery. The app does not
+classify anything: it shows the image in the most interpretable way it can and
+saves whatever you draw.
 
-## Uso
+## Usage
 
 ```bash
-python flood/label.py                          # lee data/SAR/
-python flood/label.py --dir data/otra_carpeta
+python flood/label.py                          # reads data/SAR/
+python flood/label.py --dir data/another_folder
 python flood/label.py --event-id bolivia-60373
-python flood/label.py --skip-labeled           # saltea escenas ya etiquetadas
+python flood/label.py --skip-labeled           # skips already labelled scenes
 ```
 
-Las rutas relativas se resuelven contra la raíz del repo, no contra `flood/`.
+Relative paths are resolved against the repository root, not against `flood/`.
 
-## Clases
+## Classes
 
-| # | clase | notas |
+| # | class | notes |
 |---|-------|-------|
-| 1 | `water` | agua, sin distinguir permanente de inundación (no es confiable a ojo en una sola imagen) |
-| 2 | `dry_land` | tierra seca |
-| 3 | `cloud` | solo óptico |
-| 4 | `radar_shadow` | sombra/layover de relieve: se ve oscuro como el agua pero no es agua. El falso positivo principal en SAR |
+| 1 | `water` | water, without distinguishing permanent from flood (not reliable by eye from a single image) |
+| 2 | `dry_land` | dry land |
+| 3 | `cloud` | optical only |
+| 4 | `radar_shadow` | terrain shadow/layover: looks dark like water but is not water. The main false positive in SAR |
 
-## Herramientas de dibujo
+## Drawing tools
 
-Teclas `z x c v`, o el panel derecho:
+Keys `z x c v`, or the right-hand panel:
 
-- **lazo** (`z`) — contorno a mano alzada, se cierra al soltar. Lo más rápido para bordes de agua.
-- **polígono** (`x`) — un clic por vértice; clic derecho o doble clic cierra, `Esc` cancela.
-- **pincel** (`c`) — pintás arrastrando un círculo; la rueda del mouse cambia el radio.
-- **click** (`v`) — marca un píxel suelto (puntos de control).
+- **lasso** (`z`) — freehand outline, closes when you release. Fastest for water edges.
+- **polygon** (`x`) — one click per vertex; right click or double click closes, `Esc` cancels.
+- **brush** (`c`) — paint by dragging a circle; the mouse wheel changes the radius.
+- **click** (`v`) — marks a single pixel (control points).
 
-Mientras dibujás ves el relleno del color de la clase y las hectáreas en vivo.
+While you draw you see the fill in the class colour and the hectares live.
 
-## Salidas
+## Outputs
 
-En `labels/` (raíz del repo):
+Under `labels/` (repository root):
 
-- `flood_polygons.geojson` — los polígonos, en lat/lon EPSG:4326.
-- `flood_labels.csv` — los clicks sueltos, con `row`/`col` y `lat`/`lon`.
+- `flood_polygons.geojson` — the polygons, in lat/lon EPSG:4326.
+- `flood_labels.csv` — the single clicks, with `row`/`col` and `lat`/`lon`.
 
-Lo ya guardado para una escena se redibuja punteado al reabrirla, así no se
-etiqueta dos veces lo mismo. Lo nuevo se suma, no reemplaza.
+Whatever was already saved for a scene is redrawn dashed when you reopen it, so
+the same thing does not get labelled twice. New work is appended, not replaced.
 
-## Render
+## Rendering
 
-`render.py` concentra la detección de bandas, la conversión a dB, el stretch, el
-despeckle y la composición de falso color. Lo usan tanto la GUI como
-`render_chip.py`, así que lo que ves etiquetando es idéntico a lo que se sirve.
+`render.py` concentrates band detection, dB conversion, stretching, despeckling
+and false colour composition. Both the GUI and `render_chip.py` use it, so what
+you see while labelling is identical to what gets served.
 
 ```bash
 python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif chips/
-python flood/render_chip.py escena.tif chips/ --view 2
+python flood/render_chip.py scene.tif chips/ --view 2
 python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif \
                             data/SAR/Bolivia_60373_S2Hand.tif chips/
 ```
 
-Deja un PNG y un JSON al lado con CRS, transform y tamaño, que es lo que hace
-falta para volver de píxeles a coordenadas cuando las etiquetas llegan desde
-Label Studio (que no lee GeoTIFF).
+It leaves a PNG and, next to it, a JSON with CRS, transform and size, which is
+what is needed to go back from pixels to coordinates when the labels arrive from
+Label Studio (which does not read GeoTIFF).
 
-Con varios TIFF del mismo lugar arma **un** PNG con las vistas pegadas una al lado
-de la otra, y el JSON lleva el corrimiento en x de cada panel. Ver *Ver el SAR y la
-óptica juntos* más abajo.
+Given several TIFFs of the same place it builds **one** PNG with the views
+stitched side by side, and the JSON carries the x offset of each panel. See
+*Seeing SAR and optical together* below.
 
-El suavizado de speckle es solo visual: `--speckle N` cambia la ventana, `0` la
-apaga. No afecta lo que se guarda.
+Speckle smoothing is purely visual: `--speckle N` changes the window, `0` turns
+it off. It does not affect what gets saved.
 
-## Etiquetar en Label Studio en vez de la GUI
+## Labelling in Label Studio instead of the GUI
 
-Mismo resultado, otra ventana: sale el mismo `flood_polygons.geojson`. Label
-Studio nunca ve el GeoTIFF ni sabe nada de coordenadas — devuelve píxeles, y el
-repo les aplica el `transform` que guardó `render_chip.py`.
+Same result, different window: it produces the same `flood_polygons.geojson`.
+Label Studio never sees the GeoTIFF and knows nothing about coordinates — it
+returns pixels, and the repository applies the `transform` that `render_chip.py`
+saved.
 
 ```
 data/SAR/*.tif ──render_chip.py──▶ chips/*.png + *.json
                                         │
                     make_tasks.py ──▶ tasks.json ──▶ Label Studio ──▶ export.json
                                         │                                   │
-                                   (se queda acá) ──── import_labels.py ◀───┘
+                                   (stays here) ───── import_labels.py ◀────┘
                                                               │
                                               labels/flood_polygons.geojson
 ```
 
-El nexo entre las dos mitades es `place_id`: viaja en la tarea, vuelve en el
-export, y con él `import_labels.py` sabe qué `chips/*.json` abrir. Los exports
-viejos, que traen `scene_id` en vez de `place_id`, se siguen convirtiendo igual.
+The link between the two halves is `place_id`: it travels in the task, comes
+back in the export, and with it `import_labels.py` knows which `chips/*.json` to
+open. Older exports, which carry `scene_id` instead of `place_id`, still convert
+the same way.
 
 ```bash
-python flood/render_chip.py data/SAR/escena.tif chips/
+python flood/render_chip.py data/SAR/scene.tif chips/
 python flood/make_tasks.py chips/
 ./flood/start_labelstudio.sh                      # http://localhost:8080
-# etiquetar, exportar en formato JSON a labels/export.json
+# label, then export in JSON format to labels/export.json
 .venv-ls/bin/python flood/import_labels.py labels/export.json --dry-run
 .venv-ls/bin/python flood/import_labels.py labels/export.json
 ```
 
-El conversor corre con `.venv-ls/bin/python` y no con anaconda, porque el
-decodificador de RLE viene con `label-studio-sdk`. Es el único script del repo
-que usa ese env.
+The converter runs with `.venv-ls/bin/python` and not with anaconda, because the
+RLE decoder ships with `label-studio-sdk`. It is the only script in the
+repository that uses that env.
 
-**Herramientas.** Label Studio tiene polígono, pincel y varita mágica; **no tiene
-lazo a mano alzada**. La varita es flood fill por umbral, corre en el navegador
-sin modelo, y sobre SAR en dB funciona bien porque el agua es oscura y uniforme.
-Varita y pincel devuelven máscaras RLE, el polígono devuelve vértices; los tres
-terminan en el mismo GeoJSON.
+**Tools.** Label Studio has polygon, brush and magic wand; it has **no freehand
+lasso**. The wand is a threshold flood fill, runs in the browser without a
+model, and works well over SAR in dB because water is dark and uniform. Wand and
+brush return RLE masks, the polygon returns vertices; all three end up in the
+same GeoJSON.
 
-### Ver el SAR y la óptica juntos
+### Seeing SAR and optical together
 
-En la óptica se distinguen cosas que en el SAR no —vegetación, urbano, y las nubes
-mismas—, así que conviene tener las dos vistas a la vista mientras etiquetás. Como
-las dos comparten la grilla (mismo tamaño, CRS y transform), **un píxel es el mismo
-lugar en las dos**: da igual en cuál dibujes, cae en el mismo punto del mapa.
+The optical view distinguishes things the SAR does not —vegetation, urban areas,
+and the clouds themselves—, so it is worth having both views on screen while you
+label. Since both share the grid (same size, CRS and transform), **a pixel is the
+same place in both**: it does not matter which one you draw on, it lands on the
+same point on the map.
 
-La pantalla de Label Studio es una sola para todo el proyecto y no puede cambiar
-según cuántas vistas tenga cada escena, y no siempre vas a tener las dos. Por eso
-el lado a lado se resuelve **antes**: `render_chip.py` pega las vistas en un solo
-PNG. Label Studio ve una imagen sola, tenga un panel o cuatro, y el config no
-cambia nunca.
+The Label Studio screen is a single one for the whole project and cannot change
+according to how many views each scene has, and you will not always have both.
+That is why the side by side is resolved **beforehand**: `render_chip.py` stitches
+the views into a single PNG. Label Studio sees one lone image, whether it has one
+panel or four, and the config never changes.
 
 ```bash
 python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif \
@@ -127,37 +130,39 @@ python flood/render_chip.py data/SAR/Bolivia_60373_S1Hand.tif \
 python flood/make_tasks.py chips/
 ```
 
-- El `place_id` sale del prefijo común de los `scene_id` cortando por segmentos:
-  `Bolivia_60373_S1Hand` + `Bolivia_60373_S2Hand` → `Bolivia_60373`. Se puede
-  forzar con `--place-id`.
-- Entre paneles va una **franja magenta** de 8 px. La varita mágica es un flood
-  fill sobre los píxeles que se ven, y sin la franja el relleno se pasaría de un
-  panel al otro. El magenta puro no aparece en ninguno de los dos renders.
-- `make_tasks.py` **no** le hace tarea propia a una escena que ya está dentro de un
-  panel. Sin eso etiquetarías dos veces el mismo terreno.
-- `import_labels.py` averigua en qué panel cayó cada región y le resta el
-  corrimiento en x antes de aplicar el transform. Cada polígono queda atribuido al
-  `scene_id` del panel donde lo dibujaste, más el `place_id` del lugar.
-- Un trazo que **cruza la franja** no se puede atribuir a un panel: un polígono así
-  se saltea con aviso, y una máscara pintada sobre los dos paneles avisa que la
-  geografía va a quedar repetida.
+- The `place_id` comes from the common prefix of the `scene_id`s, cut by
+  segments: `Bolivia_60373_S1Hand` + `Bolivia_60373_S2Hand` → `Bolivia_60373`. It
+  can be forced with `--place-id`.
+- Between panels goes an 8 px **magenta stripe**. The magic wand is a flood fill
+  over the pixels that are visible, and without the stripe the fill would spill
+  from one panel into the other. Pure magenta appears in neither of the two
+  renders.
+- `make_tasks.py` does **not** give a task of its own to a scene that is already
+  inside a panel. Without that you would label the same ground twice.
+- `import_labels.py` works out which panel each region fell into and subtracts
+  the x offset before applying the transform. Each polygon ends up attributed to
+  the `scene_id` of the panel you drew it on, plus the `place_id` of the place.
+- A stroke that **crosses the stripe** cannot be attributed to a panel: such a
+  polygon is skipped with a warning, and a mask painted over both panels warns
+  that the geography will end up duplicated.
 
-Lo que se pierde: el zoom es de la imagen entera, así que si te acercás mucho a un
-panel el otro se va de pantalla. Con chips de 512×512 los dos entran sin zoom.
+What is lost: the zoom applies to the whole image, so if you zoom right into one
+panel the other goes off screen. With 512×512 chips both fit without zooming.
 
-**Cuidado con las regiones sin clase.** Si dibujás antes de elegir la clase,
-Label Studio te deja guardar la región sin etiqueta y se pierde. En la GUI no
-puede pasar porque la clase es un radio siempre seleccionado. `import_labels.py`
-las cuenta y las avisa una por una en vez de tragárselas — si ves esos avisos,
-son etiquetas que hay que rehacer.
+**Watch out for regions with no class.** If you draw before choosing the class,
+Label Studio lets you save the region without a label and it is lost. In the GUI
+this cannot happen because the class is a radio button that is always selected.
+`import_labels.py` counts them and warns about them one by one instead of
+swallowing them — if you see those warnings, those are labels that have to be
+redone.
 
-**Estado de la verificación.** El ida y vuelta píxel → lon/lat → píxel da un
-error de 1e-10 px, y las áreas por polígono suman exactamente la máscara. La
-reproyección desde CRS proyectados (UTM) todavía no se probó: las escenas de
-Bolivia vienen en EPSG:4326 y no ejercitan esa rama.
+**Verification status.** The pixel → lon/lat → pixel round trip gives an error of
+1e-10 px, and the per-polygon areas sum to exactly the mask. Reprojection from
+projected CRSs (UTM) has not been tested yet: the Bolivia scenes come in
+EPSG:4326 and do not exercise that branch.
 
-Sobre los paneles: la misma forma dibujada en el panel izquierdo y en el derecho da
-coordenadas idénticas, tanto por polígono como por máscara RLE (probado con un
-agujero, que devuelve el conteo de píxeles exacto). Renderizar un TIFF solo sigue
-dando el PNG byte a byte igual que antes del cambio, y un export viejo se convierte
-en la misma geometría.
+On the panels: the same shape drawn on the left panel and on the right one gives
+identical coordinates, both by polygon and by RLE mask (tested with a hole,
+which returns the exact pixel count). Rendering a single TIFF still gives the
+same PNG byte for byte as before the change, and an old export converts to the
+same geometry.

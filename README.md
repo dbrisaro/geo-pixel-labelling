@@ -1,51 +1,52 @@
-# Etiquetado
+# geo-pixel-labelling
 
-Herramientas de etiquetado manual sobre imágenes satelitales. El foco activo son
-las **inundaciones**; el etiquetado de sargazo quedó archivado.
+Manual pixel labelling tools for satellite imagery. The active focus is
+**flooding**; sargassum labelling has been archived.
 
 ```
-flood/                  ← activo: GUI de etiquetado de inundaciones (SAR y óptico)
-  label.py              app de etiquetado
-  render.py             render visual compartido (dB, stretch, despeckle, falso color)
-  geometry.py           píxeles ↔ lon/lat, compartido por la GUI y el conversor
-  render_chip.py        GeoTIFF → PNG + JSON, para Label Studio
-  make_tasks.py         chips/ → tasks.json, lo que se importa en Label Studio
-  import_labels.py      export de Label Studio → flood_polygons.geojson
-  labeling_config.xml   la pantalla de etiquetado (4 clases, 3 herramientas)
-  start_labelstudio.sh  levanta Label Studio local en :8080
+flood/                  active: flood labelling GUI (SAR and optical)
+  label.py              labelling app
+  render.py             shared visual rendering (dB, stretch, despeckle, false colour)
+  geometry.py           pixels <-> lon/lat, shared by the GUI and the converter
+  render_chip.py        GeoTIFF -> PNG + JSON, for Label Studio
+  make_tasks.py         chips/ -> tasks.json, what gets imported into Label Studio
+  import_labels.py      Label Studio export -> flood_polygons.geojson
+  labeling_config.xml   the labelling screen (4 classes, 3 tools)
+  start_labelstudio.sh  starts Label Studio locally on :8080
 
-data/                   imágenes de entrada
-  SAR/                  escenas Sentinel-1 (default de flood/label.py)
+data/                   input imagery
+  SAR/                  Sentinel-1 scenes (default for flood/label.py)
 
-labels/                  salidas del etiquetado (geojson + csv)
-chips/                   PNG + JSON renderizados (no versionado)
+labels/                 labelling outputs (geojson + csv, not versioned)
+chips/                  rendered PNG + JSON (not versioned)
 
-archive/sargassum/       pausado: GUI de sargazo con overlay de FAI, ver su README
+archive/sargassum/      paused: sargassum GUI with FAI overlay, see its README
 ```
 
-## Instalación
+## Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Python 3.9+. Los scripts se corren **desde la raíz del repo**:
+Python 3.9+. The scripts are run **from the repository root**:
 
 ```bash
 python flood/label.py
 ```
 
-Ver [flood/README.md](flood/README.md) para las clases, herramientas de dibujo,
-formato de salida y opciones.
+See [flood/README.md](flood/README.md) for the classes, drawing tools, output
+format and options.
 
-## Estado
+## Status
 
-- Etiquetado de inundaciones con la GUI local: en uso.
-- Circuito con Label Studio: **funcionando de punta a punta en local**. Falta
-  hostearlo (URL pública, usuarios, dónde viven los PNG). Ver
+- Flood labelling with the local GUI: in use.
+- Label Studio circuit: **working end to end locally**. Hosting is still
+  missing (public URL, users, where the PNGs live). See
   [flood/README.md](flood/README.md).
-- Sargazo: archivado en `archive/sargassum/`, funciona pero no se está tocando.
+- Sargassum: archived under `archive/sargassum/`, works but is not being
+  touched.
 
-El etiquetado corre con el python de anaconda. `import_labels.py` es la única
-excepción: usa `.venv-ls/`, un venv aparte que se creó para no meter Label Studio
-y sus dependencias en el env que corre la GUI.
+Labelling runs on the anaconda python. `import_labels.py` is the only
+exception: it uses `.venv-ls/`, a separate venv created so that Label Studio and
+its dependencies stay out of the env that runs the GUI.

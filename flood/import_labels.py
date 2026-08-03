@@ -1,42 +1,42 @@
 """
-flood/import_labels.py — export de Label Studio → flood_polygons.geojson
+flood/import_labels.py — Label Studio export → flood_polygons.geojson
 
-Cierra el circuito: Label Studio devuelve píxeles, este script les aplica el
-transform de cada escena y escribe el mismo GeoJSON que produce la GUI. Los dos
-caminos son intercambiables aguas abajo.
+Closes the circuit: Label Studio returns pixels, this script applies each scene's
+transform to them and writes the same GeoJSON the GUI produces. The two paths are
+interchangeable downstream.
 
-De dónde saca cada cosa:
-    del export        la geometría, en píxeles de la imagen, y la clase
-    de chips/*.json   el crs, el transform y los paneles de ese lugar
-    el nexo           place_id, que viaja en la tarea y vuelve en el export
+Where each thing comes from:
+    from the export    the geometry, in image pixels, and the class
+    from chips/*.json  the crs, the transform and the panels of that place
+    the link           place_id, which travels in the task and comes back in the export
 
-Un PNG puede tener varias vistas del mismo lugar pegadas una al lado de la otra
-(las arma render_chip.py). Label Studio no sabe nada de eso: devuelve píxeles del
-PNG entero. Acá se averigua en qué panel cayó cada región, se le resta el
-corrimiento en x de ese panel, y recién entonces se aplica el transform. Como
-todos los paneles comparten la grilla, da igual en cuál dibujaste: cae en el
-mismo lugar del mapa.
+A PNG can have several views of the same place stitched side by side (built by
+render_chip.py). Label Studio knows nothing about that: it returns pixels of the
+whole PNG. Here we work out which panel each region fell into, subtract that
+panel's x offset, and only then apply the transform. Since all the panels share
+the grid, it does not matter which one you drew on: it lands on the same place on
+the map.
 
-Los chips de una sola vista se tratan como un panel único con corrimiento 0, así
-que los exports viejos (los que traen scene_id en vez de place_id) siguen
-convirtiéndose por el mismo camino.
+Single-view chips are treated as one lone panel with offset 0, so older exports
+(the ones carrying scene_id instead of place_id) still convert along the same
+path.
 
-Formato del export, verificado sobre uno real y no adivinado. Cada región deja
-DOS entradas en `result`, unidas por el campo `id`:
+Export format, verified against a real one and not guessed. Each region leaves
+TWO entries in `result`, joined by the `id` field:
 
     {"id": "abc", "from_name": "wand",  "type": "magicwand", "value": {"format": "rle", "rle": [...]}}
     {"id": "abc", "from_name": "label", "type": "labels",    "value": {"labels": ["water"], ...}}
 
-La primera trae la forma, la segunda la clase. Si la persona dibuja sin elegir
-clase antes, Label Studio la deja guardar y la segunda entrada no existe: esa
-región queda huérfana. Acá se cuentan y se avisan en vez de tragarlas, porque
-son etiquetas perdidas y conviene saberlo.
+The first carries the shape, the second the class. If the person draws without
+choosing a class first, Label Studio lets them save it and the second entry does
+not exist: that region is left orphaned. Here they are counted and warned about
+instead of being swallowed, because they are lost labels and it is worth knowing.
 
-Tipos de geometría que se entienden:
-    magicwand, brushlabels, brush   máscara RLE  → contornos con mask_to_polygons
-    polygonlabels, polygon          vértices en % del ancho/alto de la imagen
+Geometry types that are understood:
+    magicwand, brushlabels, brush   RLE mask  → outlines via mask_to_polygons
+    polygonlabels, polygon          vertices as % of the image width/height
 
-Uso (con el venv de Label Studio, que es el que tiene el decodificador de RLE):
+Usage (with the Label Studio venv, which is the one that has the RLE decoder):
     .venv-ls/bin/python flood/import_labels.py labels/export.json
     .venv-ls/bin/python flood/import_labels.py labels/export.json --event-id bolivia-60373
     .venv-ls/bin/python flood/import_labels.py labels/export.json --dry-run
@@ -48,12 +48,12 @@ import sys
 import json
 import argparse
 
-# Anaconda exporta PROJ_DATA y GDAL_DATA apuntando a su propia instalación. Este
-# script corre con el python de .venv-ls (el único que tiene el decodificador de
-# RLE), y ese rasterio trae su propio proj.db: si le dejamos el de anaconda falla
-# con "DATABASE.LAYOUT.VERSION.MINOR = 2 whereas a number >= 6 is expected".
-# Se descartan sólo las que apuntan afuera del intérprete que está corriendo, así
-# no se rompe nada si algún día esto corre desde el env de anaconda.
+# Anaconda exports PROJ_DATA and GDAL_DATA pointing at its own installation. This
+# script runs with the .venv-ls python (the only one that has the RLE decoder),
+# and that rasterio ships its own proj.db: if we leave anaconda's in place it
+# fails with "DATABASE.LAYOUT.VERSION.MINOR = 2 whereas a number >= 6 is
+# expected". Only the ones pointing outside the running interpreter are dropped,
+# so nothing breaks if one day this runs from the anaconda env.
 for _var in ('PROJ_DATA', 'PROJ_LIB', 'GDAL_DATA', 'GDAL_DRIVER_PATH'):
     if _var in os.environ and not os.environ[_var].startswith(sys.prefix):
         del os.environ[_var]
@@ -100,8 +100,8 @@ def load_chip_meta(chips_dir, place_id):
 
 
 def panels_of(meta):
-    """Los paneles del chip. Un chip de una sola vista es un panel con
-    corrimiento 0, así el resto del código no distingue los dos casos."""
+    """The panels of the chip. A single-view chip is one panel with offset 0, so
+    the rest of the code does not distinguish the two cases."""
     if meta.get('panels'):
         return meta['panels']
     return [{'scene_id': meta.get('scene_id') or meta.get('place_id', ''),
@@ -113,9 +113,9 @@ def panels_of(meta):
 
 
 def panel_for_ring(ring, panels):
-    """En qué panel cae un anillo, o None si cruza dos o cae en la franja.
-    Los anillos vienen en coords de centro, así que el panel que arranca en la
-    columna x0 y mide w cubre [x0 − 0.5, x0 + w − 0.5]."""
+    """Which panel a ring falls into, or None if it crosses two or lands on the
+    stripe. The rings come in centre coords, so the panel starting at column x0
+    and measuring w covers [x0 − 0.5, x0 + w − 0.5]."""
     xs = [v[0] for v in ring]
     lo, hi = min(xs), max(xs)
     for pan in panels:
@@ -126,8 +126,8 @@ def panel_for_ring(ring, panels):
 
 
 def regions(result):
-    """Junta las entradas de `result` por id: la forma con su clase.
-    Devuelve (region_id, entrada_de_forma, clase_o_None)."""
+    """Joins the `result` entries by id: the shape with its class.
+    Returns (region_id, shape_entry, class_or_None)."""
     labels = {}
     for r in result:
         if r.get('type') == 'labels':
@@ -143,10 +143,11 @@ def regions(result):
 
 
 def rle_to_mask(value, width, height):
-    """RLE de Label Studio → máscara booleana del PNG entero.
+    """Label Studio RLE → boolean mask of the whole PNG.
 
-    decode_rle devuelve el mapa aplanado con 4 canales (RGBA); la máscara es
-    "algún canal prendido". Se mira el alfa, que es el que marca lo pintado.
+    decode_rle returns the flattened map with 4 channels (RGBA); the mask is
+    "some channel on". We look at the alpha, which is the one that marks what was
+    painted.
     """
     flat = decode_rle(value['rle'])
     n = width * height
@@ -158,21 +159,22 @@ def rle_to_mask(value, width, height):
 
 
 def points_to_ring(value, width, height):
-    """Vértices en % del ancho/alto → un anillo en coords de centro de píxel.
-    El 0% es el borde izquierdo (esquina), y acá se trabaja en centros: de ahí
-    el −0.5, la misma corrección que aplica mask_to_polygons."""
+    """Vertices as % of the width/height → a ring in pixel centre coords.
+    0% is the left edge (corner), and here we work in centres: hence the −0.5,
+    the same correction mask_to_polygons applies."""
     return [(p[0] / 100.0 * width - 0.5, p[1] / 100.0 * height - 0.5)
             for p in value['points']]
 
 
 def polygons_by_panel(r, w, h, panels, place_id, rid, warn):
-    """Geometría de una región → [(panel, polígonos en píxeles de ESE panel)].
+    """Geometry of a region → [(panel, polygons in pixels of THAT panel)].
 
-    Una máscara se recorta por panel: cada trozo ya queda en coords del panel.
-    Un polígono se asigna entero al panel que lo contiene, porque partirlo sería
-    inventar vértices en el corte.
+    A mask is clipped per panel: each piece already ends up in panel coords. A
+    polygon is assigned whole to the panel that contains it, because splitting it
+    would mean inventing vertices at the cut.
 
-    Devuelve None si ya avisó el motivo, para que quien llama no vuelva a avisar."""
+    Returns None if it already warned about the reason, so the caller does not
+    warn again."""
     t = r.get('type')
     if t in MASK_TYPES:
         mask = rle_to_mask(r['value'], w, h)
@@ -268,15 +270,15 @@ def features_for_task(task, chips_dir, event_id, warn):
 
 def main():
     p = argparse.ArgumentParser(
-        description='Convierte un export de Label Studio al GeoJSON de la GUI')
-    p.add_argument('export', help='JSON exportado de Label Studio')
+        description="Converts a Label Studio export to the GUI's GeoJSON")
+    p.add_argument('export', help='JSON exported from Label Studio')
     p.add_argument('--chips', default='chips',
-                   help='Carpeta con los JSON de render_chip.py (default: chips/)')
+                   help='Folder with the JSONs from render_chip.py (default: chips/)')
     p.add_argument('--out', default='labels/flood_polygons.geojson',
-                   help='GeoJSON de salida (default: labels/flood_polygons.geojson)')
-    p.add_argument('--event-id', default='', help='Nombre del evento')
+                   help='Output GeoJSON (default: labels/flood_polygons.geojson)')
+    p.add_argument('--event-id', default='', help='Name of the event')
     p.add_argument('--dry-run', action='store_true',
-                   help='Sólo informa, no escribe nada')
+                   help='Only reports, writes nothing')
     args = p.parse_args()
 
     resolve = lambda q: q if os.path.isabs(q) else os.path.join(ROOT, q)

@@ -1,40 +1,42 @@
 """
-flood/label.py — App de etiquetado manual de inundaciones (SAR y óptico)
+flood/label.py — Manual flood labelling app (SAR and optical)
 
-VOS dibujás las etiquetas. La app no clasifica nada: solo muestra la imagen de la
-mejor forma posible para que puedas interpretarla, y guarda lo que marcás.
+YOU draw the labels. The app does not classify anything: it only shows the image
+in the best way it can so that you can interpret it, and saves what you mark.
 
-4 clases:
-    1 water          agua (sin distinguir permanente de inundación: esa distinción
-                     no es confiable a ojo en una sola imagen)
-    2 dry_land       tierra seca
-    3 cloud          nube (solo óptico)
-    4 radar_shadow   sombra/layover de relieve — se ve oscuro como el agua pero
-                     NO es agua (solo SAR). Es el falso positivo principal.
+4 classes:
+    1 water          water (without distinguishing permanent from flood: that
+                     distinction is not reliable by eye from a single image)
+    2 dry_land       dry land
+    3 cloud          cloud (optical only)
+    4 radar_shadow   terrain shadow/layover — looks dark like water but is NOT
+                     water (SAR only). It is the main false positive.
 
-4 herramientas de dibujo (panel derecho, o teclas z x c v):
-    lazo      apretás y dibujás el contorno a mano alzada; se cierra al soltar.
-              Lo más rápido para bordes de agua, que son curvas irregulares.
-    polígono  un clic por vértice. Clic derecho o doble clic cierra; Esc cancela.
-    pincel    pintás arrastrando un círculo; la rueda del mouse cambia el radio.
-    click     marca un píxel suelto (puntos de control).
+4 drawing tools (right-hand panel, or keys z x c v):
+    lasso    press and draw the outline freehand; it closes when you release.
+             Fastest for water edges, which are irregular curves.
+    polygon  one click per vertex. Right click or double click closes; Esc cancels.
+    brush    paint by dragging a circle; the mouse wheel changes the radius.
+    click    marks a single pixel (control points).
 
-Mientras dibujás ves el relleno del color de la clase y las hectáreas en vivo.
+While you draw you see the fill in the class colour and the hectares live.
 
-Detecta solo si cada .tif es SAR u óptico, leyendo los nombres de banda del archivo.
+It only detects whether each .tif is SAR or optical, by reading the band names
+from the file.
 
-Salidas (carpeta labels/):
-    labels/flood_polygons.geojson   los polígonos, en lat/lon EPSG:4326
-    labels/flood_labels.csv         los clicks sueltos, con row/col y lat/lon
+Outputs (labels/ folder):
+    labels/flood_polygons.geojson   the polygons, in lat/lon EPSG:4326
+    labels/flood_labels.csv         the single clicks, with row/col and lat/lon
 
-Lo que ya guardaste para una escena se vuelve a dibujar punteado al reabrirla, así
-no se etiqueta dos veces lo mismo. Lo nuevo se suma a lo guardado, no lo reemplaza.
+Whatever you already saved for a scene is redrawn dashed when you reopen it, so
+the same thing does not get labelled twice. New work is added to what was saved,
+it does not replace it.
 
-Uso (desde la raíz del repo):
-    python flood/label.py                          # lee data/SAR/
-    python flood/label.py --dir data/otra_carpeta
+Usage (from the repository root):
+    python flood/label.py                          # reads data/SAR/
+    python flood/label.py --dir data/another_folder
     python flood/label.py --event-id bolivia-60373
-    python flood/label.py --skip-labeled           # saltea escenas ya etiquetadas
+    python flood/label.py --skip-labeled           # skips already labelled scenes
 """
 
 import os
@@ -83,9 +85,9 @@ BRUSH_MIN, BRUSH_MAX = 2, 120
 LASSO_MIN_STEP = 1.5      # px entre puntos del trazo: evita miles de vértices redundantes
 
 
-# ── lectura ────────────────────────────────────────────────────────────────────
-# La detección de bandas, la conversión a dB, el stretch, el despeckle y la
-# composición de falso color viven en render.py, compartidos con render_chip.py.
+# ── reading ────────────────────────────────────────────────────────────────────
+# Band detection, dB conversion, stretching, despeckling and false colour
+# composition live in render.py, shared with render_chip.py.
 
 
 def parse_date(name):
@@ -110,9 +112,10 @@ def list_scenes(d):
 
 
 def compound_path(rings):
-    """Path de matplotlib con exterior + agujeros. El relleno de Agg usa regla
-    non-zero winding, así que los interiores tienen que venir con orientación
-    opuesta al exterior para que se vean vacíos (lo garantiza mask_to_polygons)."""
+    """Matplotlib path with exterior + holes. The Agg fill uses the rule
+    non-zero winding, so the interiors have to come with the opposite
+    orientation to the exterior for them to show as empty (mask_to_polygons
+    guarantees that)."""
     verts, codes = [], []
     for r in rings:
         verts += list(r) + [r[0]]
@@ -121,8 +124,9 @@ def compound_path(rings):
 
 
 def saved_features(geojson_path):
-    """Features ya guardadas, o lista vacía si el archivo no existe o está roto.
-    No revienta acá: si el GeoJSON es ilegible, _save lo respalda al guardar."""
+    """Features already saved, or an empty list if the file does not exist or is
+    broken. It does not blow up here: if the GeoJSON is unreadable, _save backs it
+    up when saving."""
     if not os.path.exists(geojson_path):
         return []
     try:
@@ -163,7 +167,7 @@ class FloodLabelApp:
         self.polygons = []
         self.view = 0
 
-        # estado del dibujo en curso
+        # state of the drawing in progress
         self._draw_verts = []
         self._drawing = False
         self._brush_mask = None
@@ -178,7 +182,7 @@ class FloodLabelApp:
         self._load()
         plt.show()
 
-    # ── carga de escena ────────────────────────────────────────────────────────
+    # ── scene loading ──────────────────────────────────────────────────────────
     def _load(self):
         path = self.scenes[self.idx]
         name = os.path.basename(path)
@@ -214,9 +218,10 @@ class FloodLabelApp:
         self._render()
 
     def _load_saved(self):
-        """Trae lo ya guardado para ESTA escena y lo deja listo para dibujar en
-        gris punteado. Sin esto, volver a una escena ya etiquetada (con ◄ o en otra
-        corrida) no muestra nada y todo lo que dibujes se anexa duplicado."""
+        """Brings in what was already saved for THIS scene and gets it ready to be
+        drawn in dashed grey. Without this, coming back to an already labelled
+        scene (with ◄ or in another run) shows nothing and everything you draw gets
+        appended as a duplicate."""
         for f in saved_features(self.geojson_path):
             if f.get('properties', {}).get('scene_id') != self.scene_id:
                 continue
@@ -248,7 +253,7 @@ class FloodLabelApp:
     def _image(self):
         return self.chip.image(self.view, self.speckle if self.smooth else 0)
 
-    # ── figura ─────────────────────────────────────────────────────────────────
+    # ── figure ─────────────────────────────────────────────────────────────────
     def _build_figure(self):
         self.fig = plt.figure(figsize=(13.5, 9))
         self.fig.patch.set_facecolor('#12121f')
@@ -312,7 +317,7 @@ class FloodLabelApp:
         self.ax.set_title(label, color='#9999bb', fontsize=10, pad=6)
         self.ax.axis('off')
 
-        # texto de área en vivo, arriba a la izquierda de la imagen
+        # live area text, top left of the image
         self.live_txt = self.ax.text(
             0.015, 0.985, '', transform=self.ax.transAxes, va='top', ha='left',
             fontsize=10, color='white', zorder=10, visible=False,
@@ -343,8 +348,8 @@ class FloodLabelApp:
             try: a.remove()
             except Exception: pass
         self._artists = []
-        # lo ya guardado en disco: punteado, sin relleno, no se puede editar ni
-        # deshacer desde acá — está para que no lo vuelvas a etiquetar
+        # what is already saved on disk: dashed, no fill, cannot be edited or
+        # undone from here — it is there so you do not label it again
         for poly in self.saved_polygons:
             s = PathPatch(compound_path(poly['rings']), fill=False,
                           edgecolor=CLASS_COLORS[poly['class']], linewidth=1.4,
@@ -365,8 +370,8 @@ class FloodLabelApp:
                           alpha=0.40, linewidth=1.2, zorder=4)
             self.ax.add_patch(p)
             self._artists.append(p)
-            # contorno del color de la clase por encima del borde blanco: se lee
-            # bien tanto sobre agua oscura como sobre tierra clara
+            # class-coloured outline on top of the white edge: it reads well both
+            # over dark water and over light ground
             o = PathPatch(path, fill=False, edgecolor=c,
                           linewidth=2.2, alpha=0.95, zorder=5)
             self.ax.add_patch(o)
@@ -400,12 +405,12 @@ class FloodLabelApp:
                     + (f' + {len(self.saved_points)} pt' if self.saved_points else '') + '⟩')
         self.status.set_text(txt)
 
-    # ── dibujo en vivo ─────────────────────────────────────────────────────────
+    # ── live drawing ───────────────────────────────────────────────────────────
     def _color(self):
         return CLASS_COLORS[self.current_class]
 
     def _show_live(self, verts, closed):
-        """Relleno + contorno del color de la clase mientras dibujás, con el área."""
+        """Class-coloured fill + outline while you draw, with the area."""
         c = self._color()
         if self._live_patch is None:
             self._live_patch = MplPolygon([(0, 0), (0, 0), (0, 0)], closed=True,
@@ -419,7 +424,7 @@ class FloodLabelApp:
         self._live_patch.set_facecolor(c)
         self._live_line.set_color(c)
         self._live_line.set_markeredgecolor(c)
-        # el lazo tiene cientos de puntos: sin marcadores se ve como un trazo limpio
+        # the lasso has hundreds of points: without markers it reads as a clean stroke
         self._live_line.set_marker('o' if self.current_tool == 'polígono' else '')
 
         if len(verts) >= 3:
@@ -442,11 +447,11 @@ class FloodLabelApp:
         if self._brush_mask is None:
             return
         c = matplotlib.colors.to_rgb(self._color())
-        # el buffer se aloca una vez por escena y se escribe en el lugar: antes se
-        # creaba un array H×W×4 nuevo en cada movimiento del mouse, lo que en una
-        # escena grande son cientos de MB por evento. Como la máscara sólo crece
-        # durante el trazo, reescribir los píxeles pintados alcanza — y además
-        # sigue el cambio de clase a mitad del trazo.
+        # the buffer is allocated once per scene and written in place: it used to
+        # create a new H×W×4 array on every mouse move, which on a large scene is
+        # hundreds of MB per event. Since the mask only grows during the stroke,
+        # rewriting the painted pixels is enough — and it also follows a class
+        # change midway through the stroke.
         if self._brush_rgba is None:
             self._brush_rgba = np.zeros((self.H, self.W, 4), np.float32)
         self._brush_rgba[self._brush_mask] = (*c, 0.45)
@@ -488,7 +493,7 @@ class FloodLabelApp:
         cc, rr = np.meshgrid(np.arange(c0, c1), np.arange(r0, r1))
         self._brush_mask[r0:r1, c0:c1] |= (cc - x) ** 2 + (rr - y) ** 2 <= r * r
 
-    # ── eventos ────────────────────────────────────────────────────────────────
+    # ── events ─────────────────────────────────────────────────────────────────
     def _in_ax(self, event):
         return event.inaxes is self.ax and event.xdata is not None
 
@@ -543,7 +548,7 @@ class FloodLabelApp:
                 self._draw_verts.append((x, y))
                 self._show_live(self._draw_verts, closed=True)
         elif self.current_tool == 'polígono' and self._draw_verts:
-            # banda elástica: el contorno sigue al cursor hasta el próximo clic
+            # rubber band: the outline follows the cursor until the next click
             self._show_live(self._draw_verts + [(x, y)], closed=True)
 
     def _on_release(self, event):
@@ -594,10 +599,10 @@ class FloodLabelApp:
             self._draw_labels()
 
     def _pixels_in(self, verts, holes=()):
-        """Centros de píxel dentro del anillo exterior y fuera de los interiores,
-        como array de pares (col, row). Path.contains_points no descuenta agujeros
-        por sí solo (probado: los rellena con cualquier orientación), así que los
-        interiores se restan a mano."""
+        """Pixel centres inside the exterior ring and outside the interiors, as an
+        array of (col, row) pairs. Path.contains_points does not discount holes on
+        its own (tested: it fills them with either orientation), so the interiors
+        are subtracted by hand."""
         va = np.array(verts, float)
         c0, c1 = max(0, int(va[:, 0].min())), min(self.W - 1, int(np.ceil(va[:, 0].max())))
         r0, r1 = max(0, int(va[:, 1].min())), min(self.H - 1, int(np.ceil(va[:, 1].max())))
@@ -612,7 +617,7 @@ class FloodLabelApp:
         return st[keep]
 
     def _add_polygon(self, verts, holes=(), quiet=False):
-        """Guarda el polígono y devuelve su cantidad exacta de píxeles."""
+        """Saves the polygon and returns its exact pixel count."""
         if len(verts) < 3:
             return 0
         n_px = len(self._pixels_in(verts, holes))
@@ -679,7 +684,7 @@ class FloodLabelApp:
         self.points, self.polygons = [], []
         self._draw_labels()
 
-    # ── guardado ───────────────────────────────────────────────────────────────
+    # ── saving ─────────────────────────────────────────────────────────────────
     def _lonlat(self, cols, rows):
         return geometry.lonlat(self.transform, self.crs, cols, rows)
 
@@ -744,7 +749,7 @@ class FloodLabelApp:
                 rec.update({'row': r, 'col': c, 'lat': round(float(lat), 6),
                             'lon': round(float(lon), 6), 'class': cls})
                 rows_out.append(rec)
-            # un CSV existente pero vacío (0 bytes) igual necesita encabezado
+            # a CSV that exists but is empty (0 bytes) still needs a header
             has_header = os.path.exists(self.csv_path) and os.path.getsize(self.csv_path) > 0
             pd.DataFrame(rows_out).to_csv(
                 self.csv_path, mode='a', index=False, header=not has_header)
@@ -753,8 +758,8 @@ class FloodLabelApp:
         ha = sum(p['n_px'] for p in self.polygons) * self.pixel_size_m ** 2 / 1e4
         print(f'  ✓ guardado: {len(self.polygons)} polígonos ({ha:.1f} ha)'
               + (f' + {n_pts} puntos' if n_pts else ''))
-        # pasan a "ya guardado": siguen visibles (punteadas) pero volver a apretar
-        # Guardar no las duplica
+        # they move to "already saved": still visible (dashed) but pressing Save
+        # again does not duplicate them
         for poly in self.polygons:
             self.saved_polygons.append({'class': poly['class'], 'n_px': poly['n_px'],
                                         'rings': [poly['verts']] + poly.get('holes', [])})
@@ -788,18 +793,18 @@ class FloodLabelApp:
 
 def main():
     p = argparse.ArgumentParser(
-        description='Etiquetado manual de inundaciones sobre imágenes SAR u ópticas')
-    p.add_argument('--dir', default='data/SAR', help='Carpeta con los .tif (default: data/SAR)')
-    p.add_argument('--event-id', default='', help='Nombre del evento, se guarda en cada etiqueta')
+        description='Manual flood labelling over SAR or optical imagery')
+    p.add_argument('--dir', default='data/SAR', help='Folder with the .tif files (default: data/SAR)')
+    p.add_argument('--event-id', default='', help='Name of the event, saved on every label')
     p.add_argument('--speckle', type=int, default=DEFAULT_SPECKLE,
-                   help=f'Ventana del suavizado visual de speckle en SAR '
-                        f'(default {DEFAULT_SPECKLE}, 0 = ninguno). Solo afecta lo que ves.')
+                   help=f'Window of the visual speckle smoothing in SAR '
+                        f'(default {DEFAULT_SPECKLE}, 0 = none). Only affects what you see.')
     p.add_argument('--rasterize', action='store_true',
-                   help='Además de la geometría, escribe cada píxel del polígono al CSV')
+                   help='On top of the geometry, writes every pixel of the polygon to the CSV')
     p.add_argument('--skip-labeled', action='store_true',
-                   help='Saltea las escenas que ya tienen etiquetas guardadas')
+                   help='Skips the scenes that already have saved labels')
     p.add_argument('--out', default=os.path.join(ROOT, 'labels'),
-                   help='Carpeta de salida (default: labels/)')
+                   help='Output folder (default: labels/)')
     args = p.parse_args()
 
     d = args.dir if os.path.isabs(args.dir) else os.path.join(ROOT, args.dir)

@@ -1,14 +1,14 @@
 """
-flood/geometry.py — conversión entre píxeles y lon/lat, compartida.
+flood/geometry.py — conversion between pixels and lon/lat, shared.
 
-Vive acá y no en label.py porque import_labels.py necesita exactamente la misma
-matemática y no puede importar la GUI (arrastraría matplotlib y Tk). Sólo pide
-numpy y rasterio.
+It lives here and not in label.py because import_labels.py needs exactly the
+same maths and cannot import the GUI (that would drag in matplotlib and Tk). It
+only requires numpy and rasterio.
 
-Convención de coordenadas, que es donde se esconden los errores de medio píxel:
-todo lo que sale y entra de acá está en coords de CENTRO de píxel, o sea el
-entero N es el centro del píxel N, igual que imshow. rasterio trabaja en coords
-de ESQUINA, de ahí los ±0.5 en los dos sentidos.
+Coordinate convention, which is where half-pixel errors hide: everything that
+goes in and out of here is in pixel CENTRE coords, that is, the integer N is the
+centre of pixel N, just like imshow. rasterio works in CORNER coords, hence the
+±0.5 in both directions.
 """
 
 import numpy as np
@@ -20,15 +20,15 @@ from rasterio.crs import CRS
 
 
 def ring_signed_area(ring):
-    """Área con signo (fórmula del cordón). El signo da la orientación."""
+    """Signed area (shoelace formula). The sign gives the orientation."""
     a = np.asarray(ring, float)
     x, y = a[:, 0], a[:, 1]
     return 0.5 * (np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
 
 
 def shoelace_px(verts):
-    """Área de un polígono en px², por la fórmula del cordón. O(n) en vértices,
-    así que se puede recalcular en cada movimiento del mouse sin que lagee."""
+    """Area of a polygon in px², by the shoelace formula. O(n) in vertices, so it
+    can be recomputed on every mouse move without lagging."""
     if len(verts) < 3:
         return 0.0
     a = np.asarray(verts, float)
@@ -37,25 +37,24 @@ def shoelace_px(verts):
 
 
 def rings_area_px(rings):
-    """Área en píxeles de un polígono con agujeros: exterior menos interiores.
-    Sobre los anillos que devuelve mask_to_polygons da el conteo exacto de
-    píxeles, porque son contornos pegados al borde de los píxeles."""
+    """Pixel area of a polygon with holes: exterior minus interiors. Over the
+    rings returned by mask_to_polygons it gives the exact pixel count, because
+    those are outlines flush with the pixel edges."""
     if not rings:
         return 0
     return int(round(shoelace_px(rings[0]) - sum(shoelace_px(r) for r in rings[1:])))
 
 
 def mask_to_polygons(mask):
-    """Máscara booleana → lista de polígonos en coords de píxel; cada polígono es
-    [anillo_exterior, *anillos_interiores]. Se usa para que el pincel termine
-    guardando geometría igual que las otras herramientas, en vez de un formato de
-    salida aparte.
+    """Boolean mask → list of polygons in pixel coords; each polygon is
+    [exterior_ring, *interior_rings]. Used so that the brush ends up saving
+    geometry just like the other tools, rather than a separate output format.
 
-    rio_shapes trabaja en coords de ESQUINA de píxel, mientras que el resto de la
-    app usa coords de CENTRO (como imshow: el entero N es el centro del píxel N).
-    De ahí el −0.5: sin ese ajuste los anillos caen entre los centros, un trazo de
-    1 px de ancho cuenta 0 píxeles y se descarta sin aviso, y todo lo demás queda
-    corrido medio píxel.
+    rio_shapes works in pixel CORNER coords, while the rest of the app uses
+    CENTRE coords (like imshow: the integer N is the centre of pixel N). Hence
+    the −0.5: without that adjustment the rings fall between the centres, a
+    stroke 1 px wide counts 0 pixels and is discarded without warning, and
+    everything else ends up shifted by half a pixel.
     """
     out = []
     for geom, _ in rio_shapes(mask.astype(np.uint8), mask=mask,
@@ -64,7 +63,7 @@ def mask_to_polygons(mask):
                  for r in geom['coordinates'] if len(r) >= 4]
         if not rings:
             continue
-        # rio_shapes devuelve exterior e interiores con la misma orientación
+        # rio_shapes returns exterior and interiors with the same orientation
         sign_ext = ring_signed_area(rings[0])
         rings = [rings[0]] + [r if ring_signed_area(r) * sign_ext < 0 else r[::-1]
                               for r in rings[1:]]
@@ -73,11 +72,11 @@ def mask_to_polygons(mask):
 
 
 def lonlat(transform, crs, cols, rows):
-    """(col, row) en convención de CENTRO de píxel → lon/lat EPSG:4326.
-    Una sola convención para clicks (enteros) y vértices (floats):
-    transform.xy hace transform * (col + 0.5, row + 0.5) y acepta floats,
-    verificado bit a bit. Antes los polígonos usaban transform * (col, row),
-    que apunta a la esquina y los corría medio píxel."""
+    """(col, row) in pixel CENTRE convention → lon/lat EPSG:4326.
+    One single convention for clicks (integers) and vertices (floats):
+    transform.xy does transform * (col + 0.5, row + 0.5) and accepts floats,
+    verified bit by bit. Polygons used to use transform * (col, row), which
+    points at the corner and shifted them by half a pixel."""
     xs, ys = rasterio.transform.xy(transform, list(rows), list(cols))
     if crs and not crs.is_geographic:
         return warp_transform(crs, CRS.from_epsg(4326), xs, ys)
@@ -85,8 +84,8 @@ def lonlat(transform, crs, cols, rows):
 
 
 def px_from_lonlat(transform, crs, lons, lats):
-    """Inversa de lonlat: lon/lat → (col, row) en coords de centro de píxel.
-    Se usa para redibujar las etiquetas ya guardadas de esta escena."""
+    """Inverse of lonlat: lon/lat → (col, row) in pixel centre coords.
+    Used to redraw the labels already saved for this scene."""
     if crs and not crs.is_geographic:
         xs, ys = warp_transform(CRS.from_epsg(4326), crs, list(lons), list(lats))
     else:
@@ -100,7 +99,7 @@ def px_from_lonlat(transform, crs, lons, lats):
 
 
 def rings_to_coords(transform, crs, rings):
-    """Anillos en píxeles → anillos lon/lat cerrados, listos para un GeoJSON."""
+    """Rings in pixels → closed lon/lat rings, ready for a GeoJSON."""
     coords = []
     for r in rings:
         lons, lats = lonlat(transform, crs, [v[0] for v in r], [v[1] for v in r])

@@ -1,28 +1,29 @@
 """
-flood/make_tasks.py — arma el tasks.json que se importa en Label Studio.
+flood/make_tasks.py — builds the tasks.json that gets imported into Label Studio.
 
-Este script recorre una carpeta de chips (los PNG + JSON que dejó render_chip.py) y
-escribe una tarea por lugar.
+This script walks a folder of chips (the PNG + JSON that render_chip.py left) and
+writes one task per place.
 
-Cada tarea lleva el place_id adentro. Label Studio lo devuelve tal cual en el
-export, y es lo que después permite encontrar el JSON con el crs, el transform y
-los paneles de ese lugar para volver de píxeles a lon/lat.
+Each task carries the place_id inside it. Label Studio returns it as is in the
+export, and that is what later makes it possible to find the JSON with the crs,
+the transform and the panels of that place in order to go back from pixels to
+lon/lat.
 
-Si un chip tiene varios paneles (varias vistas pegadas en un PNG), las escenas que
-lo componen NO generan tarea propia: ya están dentro del panel. Sin eso se
-etiquetaría dos veces el mismo terreno y el export traería dos verdades para los
-mismos píxeles.
+If a chip has several panels (several views stitched into one PNG), the scenes
+that compose it do NOT generate a task of their own: they are already inside the
+panel. Without that the same ground would be labelled twice and the export would
+bring two truths for the same pixels.
 
-La URL de la imagen es lo único que cambia entre local y hosteado:
+The image URL is the only thing that changes between local and hosted:
 
-    local       /data/local-files/?d=chips/lugar.png
-                requiere LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true y
-                LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT apuntando a la raíz del repo
-    hosteado    --base-url https://donde-sea/chips
+    local     /data/local-files/?d=chips/place.png
+              requires LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true and
+              LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT pointing at the repo root
+    hosted    --base-url https://wherever/chips
 
-Uso (desde la raíz del repo):
+Usage (from the repository root):
     python flood/make_tasks.py chips/
-    python flood/make_tasks.py chips/ --base-url https://donde-sea/chips
+    python flood/make_tasks.py chips/ --base-url https://wherever/chips
     python flood/make_tasks.py chips/ --out labels/tasks.json
 """
 
@@ -96,14 +97,14 @@ def make_tasks(chips_dir, base_url=''):
 
 def main():
     p = argparse.ArgumentParser(
-        description='Arma el tasks.json para importar en Label Studio')
+        description='Builds the tasks.json to import into Label Studio')
     p.add_argument('chips_dir', nargs='?', default='chips',
-                   help='Carpeta con los PNG + JSON de render_chip.py (default: chips/)')
+                   help='Folder with the PNG + JSON from render_chip.py (default: chips/)')
     p.add_argument('--base-url', default='',
-                   help='URL pública donde se sirven los PNG. Sin esto usa el '
-                        'serving de archivos locales de Label Studio.')
+                   help='Public URL where the PNGs are served. Without this it uses '
+                        "Label Studio's local file serving.")
     p.add_argument('--out', default='',
-                   help='Archivo de salida (default: <chips_dir>/tasks.json)')
+                   help='Output file (default: <chips_dir>/tasks.json)')
     args = p.parse_args()
 
     chips_dir = args.chips_dir if os.path.isabs(args.chips_dir) \
