@@ -1,0 +1,72 @@
+# Label Studio hosted, three containers:
+#
+#   db    Postgres. Replaces the sqlite that `label-studio start` uses locally,
+#         which locks up as soon as two people label at the same time.
+#   app   Label Studio itself. Its data volume holds uploads and exports.
+#   web   nginx. Two jobs: it proxies Label Studio, and it serves chips/ as
+#         static files under the SAME origin. That is what makes the magic wand
+#         work without CORS: the wand reads the image pixels from the browser,
+#         and a cross-domain image would come back tainted.
+#
+# The web port is bound to 127.0.0.1, so nothing is reachable from the internet.
+# Access is by ssh tunnel until the instance has a name and a certificate:
+#
+#   ssh -L 8080:localhost:80 ubuntu@<ip>      then http://localhost:8080
+#
+# Once there is a domain, publish the port and put a certificate in front.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: labelstudio
+      POSTGRES_USER: labelstudio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labelstudio"]
+      interval: 5s
+      retries: 10
+
+  app:
+    image: heartexlabs/label-studio:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_DB: default
+      POSTGRE_NAME: labelstudio
+      POSTGRE_USER: labelstudio
+      POSTGRE_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRE_HOST: db
+      POSTGRE_PORT: 5432
+      LABEL_STUDIO_HOST: ${LABEL_STUDIO_HOST}
+      CSRF_TRUSTED_ORIGINS: ${LABEL_STUDIO_HOST}
+      # Nobody registers on their own: accounts come from the invite link in
+      # Organization -> People.
+      #
+      # WATCH OUT on a brand new database: with this on, /user/signup/ answers
+      # 403 and there is no way to create the FIRST account either. Start with
+      # it "false", create the owner account, put it back to "true". See
+      # deploy/README.md.
+      LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "true"
+    volumes:
+      - lsdata:/label-studio/data
+    restart: unless-stopped
+
+  web:
+    image: nginx:1.27-alpine
+    depends_on:
+      - app
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /srv/chips:/srv/chips:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  lsdata:

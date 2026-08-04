@@ -17,6 +17,11 @@ flood/                  active: flood labelling GUI (SAR and optical)
 data/                   input imagery
   SAR/                  Sentinel-1 scenes (default for flood/label.py)
 
+deploy/                 hosted Label Studio: EC2 + Docker, see its README
+  docker-compose.yml    Postgres + Label Studio + nginx
+  nginx.conf            proxies Label Studio and serves chips/ on the same origin
+  sync_chips.sh         chips/ -> the server, and builds the tasks.json
+
 labels/                 labelling outputs (geojson + csv, not versioned)
 chips/                  rendered PNG + JSON (not versioned)
 
@@ -41,9 +46,11 @@ format and options.
 ## Status
 
 - Flood labelling with the local GUI: in use.
-- Label Studio circuit: **working end to end locally**. Hosting is still
-  missing (public URL, users, where the PNGs live). See
+- Label Studio circuit: working end to end locally, see
   [flood/README.md](flood/README.md).
+- Label Studio **hosted**: up on an EC2, reachable over an ssh tunnel. What is
+  still missing is a name and a certificate so the team enters by web, and both
+  need the AWS administrator. See [deploy/README.md](deploy/README.md).
 - Sargassum: archived under `archive/sargassum/`, works but is not being
   touched.
 

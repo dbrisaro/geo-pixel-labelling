@@ -4,3 +4,5 @@ chips/
 labels/
 .venv-ls/
 labelstudio-data/
+
+data/floods/
