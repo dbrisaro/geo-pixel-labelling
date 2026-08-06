@@ -12,6 +12,20 @@
   white cloud cannot be told apart while you are drawing it. That is also why
   dry_land is earth and not grey, which is the colour of the SAR.
 
+  has_water is asked BEFORE drawing, and answering it is required. It is the
+  Penguin Watch flow: the volunteer first says whether there is anything there,
+  and only then marks it. Three reasons it earns its place here:
+
+    - a dry control scene is resolved without drawing anything;
+    - it gives an agreement figure per image even when nobody drew, which
+      otherwise has to be guessed from empty masks;
+    - `unsure` is a legitimate answer on a cloudy scene. Without it, whoever
+      cannot tell draws something invented rather than leaving the task open.
+
+  The tools stay visible whichever way it is answered. Penguin Watch branches
+  here and only shows the marking step on a yes; that is not worth the risk of
+  the wand not initialising inside a hidden View for a team this size.
+
   The 3 tools share a single <Labels>, so they are picked from the toolbar as
   convenient:
     wand     click on the water and drag to widen the tolerance. Fastest when the
@@ -39,6 +53,13 @@
 <View>
 
   <Header value="$place_id — $image_type — $view_label"/>
+
+  <Choices name="has_water" toName="img" choice="single"
+           required="true" showInline="true">
+    <Choice value="yes"/>
+    <Choice value="no"/>
+    <Choice value="unsure"/>
+  </Choices>
 
   <Labels name="label" toName="img">
     <Label value="water"        background="#0a84ff"/>
