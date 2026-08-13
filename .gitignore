@@ -3,6 +3,7 @@ __pycache__/
 chips/
 labels/
 .venv-ls/
+.venv/
 labelstudio-data/
 
 data/floods/
