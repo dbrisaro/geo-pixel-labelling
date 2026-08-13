@@ -7,12 +7,14 @@ leaves the same place twice, and then the same ground gets labelled twice by two
 different people. Since the scenes arrive in batches, this script asks the
 project which place_ids it already has and only sends the new ones.
 
-It talks to Label Studio through the ssh tunnel, so it needs the tunnel open:
+It talks to Label Studio over https, at labelstudio.suyana.io. No tunnel: the
+site is on the web now.
 
-    ssh -L 8081:localhost:80 ubuntu@"$LS_HOST"
+deploy/daily.py does this on the instance every morning and does it better,
+because it also renders what is missing first. This one is for importing a
+batch by hand from a laptop, without waiting for the timer.
 
-Neither the address nor the token are in the repository: LS_HOST and LS_TOKEN,
-or ~/.config/labelstudio-host and ~/.config/labelstudio-token.
+The token is not in the repository: LS_TOKEN or ~/.config/labelstudio-token.
 
 Usage (from the repository root):
     python deploy/import_tasks.py                        # labels/tasks-hosted.json
@@ -74,8 +76,8 @@ def main():
         description='Imports tasks into Label Studio without duplicating places')
     p.add_argument('tasks', nargs='?', default='labels/tasks-hosted.json',
                    help='File from make_tasks.py (default labels/tasks-hosted.json)')
-    p.add_argument('--url', default=os.environ.get('LS_URL', 'http://localhost:8081'),
-                   help='Label Studio address (default http://localhost:8081)')
+    p.add_argument('--url', default=os.environ.get('LS_URL', 'https://labelstudio.suyana.io'),
+                   help='Label Studio address (default https://labelstudio.suyana.io)')
     p.add_argument('--project', type=int, default=1, help='Project id (default 1)')
     p.add_argument('--dry-run', action='store_true',
                    help='Says what it would import and does not send anything')

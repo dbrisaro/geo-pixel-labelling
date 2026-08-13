@@ -26,5 +26,11 @@ ExecStart=/opt/etiquetado/.venv/bin/python deploy/daily.py
 # host stays out of this file and out of the repository.
 Environment=FLOODS_MIRROR=suyanahub:/srv/suyana/floods_labeling
 # The token lives in ~ubuntu/.config/labelstudio-token, which daily.py reads on
-# its own. The address is not needed: from the machine itself Label Studio is
-# nginx on localhost:80, which is the default.
+# its own.
+#
+# The address has to be the real name and not localhost: port 80 redirects
+# everything to https now, and a redirect to https://localhost fails to verify
+# against a certificate issued for labelstudio.suyana.io. /etc/hosts on the
+# instance sends that name to 127.0.0.1, so the request stays inside the machine
+# and the certificate still matches.
+Environment=LS_URL=https://labelstudio.suyana.io
