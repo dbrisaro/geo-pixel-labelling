@@ -1,0 +1,30 @@
+# One turn of the circuit. Installed with the timer next to it:
+#
+#   sudo cp deploy/floods-daily.* /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now floods-daily.timer
+#
+# Run it by hand, without waiting for the timer:
+#   sudo systemctl start floods-daily.service
+#   journalctl -u floods-daily.service -n 50
+#
+# Being oneshot, systemd will not start a second turn while one is running: no
+# lock file needed.
+
+[Unit]
+Description=Una vuelta del circuito de etiquetado de floods
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/etiquetado
+ExecStart=/opt/etiquetado/.venv/bin/python deploy/daily.py
+# The other machine: where the TIFFs come from and where the GeoJSONs go back
+# to. It is the ssh alias in ~ubuntu/.ssh/config, not an address, so the real
+# host stays out of this file and out of the repository.
+Environment=FLOODS_MIRROR=suyanahub:/srv/suyana/floods_labeling
+# The token lives in ~ubuntu/.config/labelstudio-token, which daily.py reads on
+# its own. The address is not needed: from the machine itself Label Studio is
+# nginx on localhost:80, which is the default.

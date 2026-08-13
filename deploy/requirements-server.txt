@@ -1,0 +1,12 @@
+# What deploy/daily.py needs on the server. It is not the same as the root
+# requirements.txt: there is no GUI here, so no matplotlib and no pandas, and
+# label-studio-sdk is needed because the RLE decoder for the brush and the magic
+# wand ships with it.
+#
+# On a laptop this repository uses two envs (anaconda for the GUI, .venv-ls for
+# the converter). On the server there is only one, and this is it.
+numpy
+rasterio
+scipy
+Pillow
+label-studio-sdk

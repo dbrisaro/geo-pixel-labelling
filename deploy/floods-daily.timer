@@ -1,0 +1,15 @@
+# Every day at 07:00 UTC, which is early morning in Argentina: whoever labels
+# finds the new scenes already loaded, and yesterday's work already converted.
+#
+# Persistent=true so a turn that was missed because the instance was stopped
+# runs as soon as it comes back up, instead of waiting a whole day.
+
+[Unit]
+Description=Corre el circuito de etiquetado una vez por día
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

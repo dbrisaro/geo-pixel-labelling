@@ -41,6 +41,17 @@ SEP_PX = 8
 SEP_RGB = (1.0, 0.0, 1.0)
 
 
+def provenance_path(path):
+    """Where the TIFF came from, for the JSON and from there for the GeoJSON.
+
+    Relative while it stays under the working directory (`data/SAR/scene.tif`,
+    which is how it reads on a laptop), absolute as soon as it does not: on the
+    server the imagery lives in /srv and the working directory is the repo, and
+    a `../../srv/...` is a worse pointer than the full path."""
+    rel = os.path.relpath(path)
+    return rel if not rel.startswith(os.pardir) else os.path.abspath(path)
+
+
 def place_id_of(scene_ids):
     """Common prefix, cutting by segments and not by letters: the prefix of
     Bolivia_60373_S1Hand and Bolivia_60373_S2Hand is Bolivia_60373, not
@@ -97,7 +108,7 @@ def render_chip(tifs, out_dir, views=None, speckle=render.DEFAULT_SPECKLE,
         canvas[:, x:x + chip.width] = rgb
         panels.append({
             'scene_id': chip.scene_id,
-            'source_tif': os.path.relpath(chip.path),
+            'source_tif': provenance_path(chip.path),
             'image_type': chip.kind,
             'x_offset': x,
             'width': chip.width,
