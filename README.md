@@ -20,7 +20,10 @@ data/                   input imagery
 deploy/                 hosted Label Studio: EC2 + Docker, see its README
   docker-compose.yml    Postgres + Label Studio + nginx
   nginx.conf            proxies Label Studio and serves chips/ on the same origin
-  sync_chips.sh         chips/ -> the server, and builds the tasks.json
+  daily.py              one turn of the whole circuit, on a timer, on the server
+  floods-daily.*        the systemd service and timer that run it
+  import_tasks.py       chips -> tasks, without repeating what is already there
+  requirements-server.txt  what the server needs, which is not what the GUI needs
 
 labels/                 labelling outputs (geojson + csv, not versioned)
 chips/                  rendered PNG + JSON (not versioned)
@@ -48,9 +51,14 @@ format and options.
 - Flood labelling with the local GUI: in use.
 - Label Studio circuit: working end to end locally, see
   [flood/README.md](flood/README.md).
-- Label Studio **hosted**: up on an EC2, reachable over an ssh tunnel. What is
-  still missing is a name and a certificate so the team enters by web, and both
-  need the AWS administrator. See [deploy/README.md](deploy/README.md).
+- Label Studio **hosted**: up on an EC2 at **https://labelstudio.suyana.io**,
+  with a Let's Encrypt certificate that renews on its own. The team enters by
+  web; the ssh tunnel is no longer needed. What is still missing is an elastic
+  IP, which needs the AWS administrator. See [deploy/README.md](deploy/README.md).
+- **Daily circuit** (`deploy/daily.py`): running on the instance on a systemd
+  timer, 07:00 UTC. Rendering and conversion happen there, so nothing passes
+  through a laptop any more. It does nothing until somebody leaves TIFFs in
+  `/srv/suyana/floods_labeling/unlabeled/`.
 - Sargassum: archived under `archive/sargassum/`, works but is not being
   touched.
 

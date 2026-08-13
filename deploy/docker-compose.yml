@@ -61,10 +61,17 @@ services:
     depends_on:
       - app
     ports:
-      - "127.0.0.1:80:80"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /srv/chips:/srv/chips:ro
+      # The chips that daily.py writes. Inside the container it stays /srv/chips
+      # so nginx.conf does not need to know where they live on the host.
+      - /srv/suyana/floods_labeling/chips:/srv/chips:ro
+      # The certificate, issued and renewed by certbot on the host, and the
+      # folder where it leaves the ACME challenge.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /srv/certbot:/var/www/certbot:ro
     restart: unless-stopped
 
 volumes:
