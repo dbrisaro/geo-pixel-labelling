@@ -192,6 +192,28 @@ account cannot be created either: `/user/signup/` answers 403 and there is
 nobody to invite you. Create the owner account, then put it back to `true` and
 `docker compose up -d app`.
 
+Forgetting a password has no way out through the web: there is no mail server, so
+the *forgot password* form has nothing to send, and the owner cannot change
+somebody else's password from the UI either. It is done on the instance, and it
+answers `Password successfully changed`:
+
+```bash
+cd /opt/labelstudio
+sudo docker compose exec -T app label-studio reset_password \
+    --username <the email> --password '<a provisional one>'
+```
+
+The provisional one travels by a different channel than the address and the
+username, and gets changed by its owner in *Account & Settings* on the way in:
+Label Studio does not force that on the first login.
+
+Who exists is a question for the database, not for the UI:
+
+```bash
+sudo docker compose exec -T db \
+    psql -U labelstudio -d labelstudio -c 'select id, email, is_active from htx_user'
+```
+
 ## Operating it
 
 ```bash
