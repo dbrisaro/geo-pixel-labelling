@@ -84,12 +84,17 @@ python deploy/daily.py
 
 There is no database and nothing to remember between runs. A place is pending if
 it has no chip, a task is new if the project does not have its `place_id`, and an
-annotation is unconverted if there is no file for it in `labeled/`. Running it
-twice in a row does nothing the second time, so a turn that failed halfway just
-gets picked up by the next one.
+annotation is unconverted if its file in `labeled/` is missing or carries a
+different `updated_at`, so a correction made in Label Studio after a turn goes
+out on the next one. Running it twice in a row does nothing the second time, so
+a turn that failed halfway just gets picked up by the next one.
 
 A place counts as labelled with **one** annotation. The day several people label
 the same image, the consensus goes inside `convert()`, before writing.
+
+The answer to `has_water` travels in the GeoJSON, at the top and in every
+feature. A place answered `no` (or `unsure`) with nothing drawn is written too,
+with no features: a dry scene is a label as much as a flooded one.
 
 ### Setting it up on the instance
 
@@ -117,8 +122,10 @@ That is also how you update it. The day this is pushed, `/opt/etiquetado` can
 become a real clone and updating turns into `git pull`.
 
 The token goes in `~/.config/labelstudio-token` on the instance, same as
-everywhere else, `chmod 600`. The address is not needed: from the machine itself
-Label Studio is nginx on `localhost:80`, which is the default.
+everywhere else, `chmod 600`. The address defaults to
+`https://labelstudio.suyana.io`, which `/etc/hosts` on the instance sends to
+`127.0.0.1`. `http://localhost` no longer works: port 80 redirects to https and
+the certificate does not match `localhost`.
 
 ### Reaching suyanahub without anybody there
 

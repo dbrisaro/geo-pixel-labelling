@@ -29,8 +29,8 @@ One turn, in order:
 
 There is no database and nothing to remember between runs. A place is pending if
 it has no chip, a task is new if the project does not have its place_id, and an
-annotation is unconverted if there is no file for it in labeled/. Running this
-twice in a row does nothing the second time.
+annotation is unconverted if its file in labeled/ is missing or carries a
+different updated_at. Running this twice in a row does nothing the second time.
 
 A place counts as labelled with ONE annotation. The day several people label the
 same image, this is the place where the consensus goes, before writing.
@@ -48,7 +48,6 @@ comes from FLOODS_MIRROR or --mirror, and is never hardcoded here.
 
 import os
 import sys
-import glob
 import json
 import argparse
 import subprocess
@@ -106,14 +105,11 @@ def pull_unlabeled(mirror, unlabeled, dry):
     again. It never deletes: a scene taken out of suyanahub keeps its chip, its
     task and its labels here, which is the whole point of not deleting.
 
-    The `*.tif` is expanded by the shell on the other side when the mirror is
-    remote, which is the normal case. If it is a local folder there is no shell
-    to do it and rsync would look for a file actually called `*.tif`, so we
-    expand it here."""
-    if ':' in mirror:
-        sources = [f'{mirror}/unlabeled/*.tif']
-    else:
-        sources = sorted(glob.glob(os.path.join(mirror, 'unlabeled', '*.tif')))
+    The names are listed first and passed one by one, instead of a `*.tif`: a
+    glob that matches nothing makes rsync exit with 23, and an empty unlabeled/
+    on suyanahub would take the whole turn down with it."""
+    names = catalog.listdir(f'{mirror}/unlabeled')
+    sources = [f'{mirror}/unlabeled/{n}' for n in names]
     return rsync(sources, unlabeled + '/', dry, ('traigo', 'traería'))
 
 
@@ -208,34 +204,59 @@ def place_of(task):
     return data.get('place_id') or data.get('scene_id') or ''
 
 
+def last_update(task):
+    """When the annotations of the task were last touched, to know whether the
+    GeoJSON already written is still the current one."""
+    return max((a.get('updated_at') or '' for a in task.get('annotations', [])),
+               default='')
+
+
+def written_update(path):
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return json.load(f).get('updated_at')
+
+
 def convert(tasks, chips, labeled, event_id, dry, warn):
-    """Writes labeled/<place>.geojson for each annotated place that has none."""
+    """Writes labeled/<place>.geojson for each annotated place that has none, or
+    whose annotation changed since it was written.
+
+    A place answered with has_water and nothing drawn (a dry scene, or one
+    nobody could tell) is written too, with no features: that answer is a label
+    as much as a polygon is."""
     hechos = 0
     for task in tasks:
         place = place_of(task)
         if not place:
             warn(f'tarea {task.get("id")} sin place_id ni scene_id, la salteo')
             continue
-        out = os.path.join(labeled, f'{place}.geojson')
-        if os.path.exists(out):
-            continue
         if not task.get('annotations'):
+            continue
+        out = os.path.join(labeled, f'{place}.geojson')
+        updated = last_update(task)
+        if written_update(out) == updated:
             continue
 
         feats = import_labels.features_for_task(task, chips, event_id, warn)
-        if not feats:
-            warn(f'{place}: la anotación no dejó ningún polígono, no escribo nada')
+        has_water = import_labels.has_water_of(task)
+        if not feats and has_water is None:
+            warn(f'{place}: la anotación no dejó ningún polígono ni respuesta a '
+                 f'has_water, no escribo nada')
             continue
         if dry:
-            print(f'  escribiría {place}.geojson ({len(feats)} polígono/s)')
+            print(f'  escribiría {place}.geojson ({len(feats)} polígono/s, '
+                  f'has_water={has_water})')
             hechos += 1
             continue
 
         tmp = out + '.tmp'
         with open(tmp, 'w') as f:
-            json.dump({'type': 'FeatureCollection', 'features': feats}, f)
+            json.dump({'type': 'FeatureCollection', 'place_id': place,
+                       'has_water': has_water, 'updated_at': updated,
+                       'features': feats}, f)
         os.replace(tmp, out)
-        print(f'  {place}.geojson  {len(feats)} polígono(s)')
+        print(f'  {place}.geojson  {len(feats)} polígono(s), has_water={has_water}')
         hechos += 1
     return hechos
 
@@ -247,9 +268,9 @@ def main():
     p.add_argument('--root', default=FLOODS_ROOT,
                    help=f'Folder with unlabeled/, chips/ and labeled/ '
                         f'(default {FLOODS_ROOT})')
-    p.add_argument('--url', default=os.environ.get('LS_URL', 'http://localhost'),
-                   help='Label Studio address (default http://localhost, which is '
-                        'nginx on the server itself)')
+    p.add_argument('--url', default=os.environ.get('LS_URL', 'https://labelstudio.suyana.io'),
+                   help='Label Studio address (default https://labelstudio.suyana.io, '
+                        'which /etc/hosts on the instance sends to 127.0.0.1)')
     p.add_argument('--project', type=int, default=1, help='Project id (default 1)')
     p.add_argument('--event-id', default='', help='Name of the event, goes in the GeoJSON')
     p.add_argument('--speckle', type=int, default=None,

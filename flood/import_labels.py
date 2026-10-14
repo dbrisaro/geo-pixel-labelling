@@ -58,7 +58,6 @@ for _var in ('PROJ_DATA', 'PROJ_LIB', 'GDAL_DATA', 'GDAL_DRIVER_PATH'):
     if _var in os.environ and not os.environ[_var].startswith(sys.prefix):
         del os.environ[_var]
 
-import numpy as np
 import rasterio
 from rasterio.crs import CRS
 from label_studio_sdk.converter.brush import decode_rle
@@ -142,6 +141,20 @@ def regions(result):
             yield rid, r, cls
 
 
+def has_water_of(task):
+    """The answer to has_water, from the first annotation that was not cancelled,
+    or None if nobody answered it."""
+    for ann in task.get('annotations', []):
+        if ann.get('was_cancelled'):
+            continue
+        for r in ann.get('result', []):
+            if r.get('from_name') == 'has_water':
+                got = r.get('value', {}).get('choices') or []
+                if got:
+                    return got[0]
+    return None
+
+
 def rle_to_mask(value, width, height):
     """Label Studio RLE → boolean mask of the whole PNG.
 
@@ -216,6 +229,7 @@ def features_for_task(task, chips_dir, event_id, warn):
     transform, crs = meta['_transform'], meta['_crs']
     px_m = meta.get('pixel_size_m') or 0
     panels = panels_of(meta)
+    has_water = has_water_of(task)
     out = []
 
     for ann in task.get('annotations', []):
@@ -256,6 +270,7 @@ def features_for_task(task, chips_dir, event_id, warn):
                           'event_id': event_id,
                           'image_path': pan.get('source_tif', ''),
                           'class': cls,
+                          'has_water': has_water,
                           'n_pixels': n_px,
                           'area_ha': round(n_px * px_m ** 2 / 1e4, 3),
                           'geom_id': f'{scene_id}#{rid}' + (f'-{i}' if len(polys) > 1 else ''),
