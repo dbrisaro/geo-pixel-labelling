@@ -34,6 +34,7 @@ understands (a name from ~/.ssh/config included).
 import os
 import csv
 import glob
+import shlex
 import argparse
 import subprocess
 from collections import defaultdict
@@ -58,7 +59,7 @@ def listdir(source):
     """File names in SOURCE, which can be local or host:path."""
     if ':' in source and not os.path.isdir(source):
         host, _, path = source.partition(':')
-        out = subprocess.run(['ssh', host, f'ls -1 {path}'],
+        out = subprocess.run(['ssh', host, f'ls -1 {shlex.quote(path)}'],
                              capture_output=True, text=True, check=True)
         return [n for n in out.stdout.split('\n') if n.endswith('.tif')]
     d = source if os.path.isabs(source) else os.path.join(ROOT, source)
