@@ -58,9 +58,6 @@ from matplotlib.patches import Polygon as MplPolygon, PathPatch, Circle
 from matplotlib.lines import Line2D
 from matplotlib.path import Path
 
-import rasterio
-from rasterio.crs import CRS
-
 import render
 from render import DEFAULT_SPECKLE
 from geometry import mask_to_polygons, rings_to_coords, shoelace_px

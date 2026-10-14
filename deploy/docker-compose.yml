@@ -8,12 +8,9 @@
 #         work without CORS: the wand reads the image pixels from the browser,
 #         and a cross-domain image would come back tainted.
 #
-# The web port is bound to 127.0.0.1, so nothing is reachable from the internet.
-# Access is by ssh tunnel until the instance has a name and a certificate:
-#
-#   ssh -L 8080:localhost:80 ubuntu@<ip>      then http://localhost:8080
-#
-# Once there is a domain, publish the port and put a certificate in front.
+# The web ports are published: 80 answers Let's Encrypt and redirects to https,
+# 443 serves https://labelstudio.suyana.io. Postgres and the app are not
+# published, they are only reachable through nginx.
 
 services:
   db:
